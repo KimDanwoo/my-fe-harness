@@ -1,0 +1,23 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="my-fe-harness">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square badge -->
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <!-- shield = 안전장치(guardrail) -->
+  <path d="M64 72 L192 72 V130 C192 170 162 193 128 206 C94 193 64 170 64 130 Z"
+        fill="#FFFFFF" fill-opacity="0.12"
+        stroke="#FFFFFF" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- </> = frontend code -->
+  <g stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="110,116 92,134 110,152"/>
+    <line x1="140" y1="110" x2="116" y2="158"/>
+    <polyline points="146,116 164,134 146,152"/>
+  </g>
+</svg>
