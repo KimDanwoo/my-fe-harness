@@ -1,6 +1,6 @@
 {
   "name": "my-fe-harness",
-  "owner": { "name": "danwoo" },
+  "owner": { "name": "KimDanwoo" },
   "metadata": {
     "description": "my-fe-harness — frontend convention harness (TS/React/Vue/commit/monorepo/FSD rule packs)."
   },
