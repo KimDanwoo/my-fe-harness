@@ -1,0 +1,16 @@
+{
+  "name": "my-fe-harness",
+  "owner": { "name": "danwoo" },
+  "metadata": {
+    "description": "my-fe-harness — frontend convention harness (TS/React/Vue/commit/monorepo/FSD rule packs)."
+  },
+  "plugins": [
+    {
+      "name": "my-fe-harness",
+      "source": "./",
+      "description": "규칙 팩 설치(/install)와 FSD 스캐폴드(/fsd)를 제공하는 컨벤션 하네스.",
+      "category": "productivity",
+      "keywords": ["conventions", "typescript", "react", "vue", "fsd", "monorepo", "commit"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "my-fe-harness",
+  "version": "0.1.0",
+  "description": "Frontend convention harness for Claude Code — TS/React/Vue/commit/monorepo/FSD rule packs with /install and /fsd commands.",
+  "author": { "name": "danwoo" },
+  "homepage": "https://github.com/danwoo/my-fe-harness",
+  "repository": "https://github.com/danwoo/my-fe-harness",
+  "license": "MIT",
+  "keywords": ["conventions", "typescript", "react", "vue", "fsd", "monorepo", "commit"]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "my-fe-harness",
+  "version": "0.1.0",
+  "description": "Frontend convention harness for Claude Code — safety guardrails (enforced via a PreToolUse hook) plus path-scoped TS/React/Vue/commit/monorepo/FSD rule packs. Installable as a plugin or via npx.",
+  "type": "module",
+  "bin": {
+    "my-fe-harness": "bin/my-fe-harness.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "rules",
+    "commands",
+    "skills",
+    "scripts",
+    "hooks",
+    "assets",
+    ".claude-plugin"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "list": "node bin/my-fe-harness.mjs list"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "conventions",
+    "harness",
+    "typescript",
+    "react",
+    "vue",
+    "fsd",
+    "monorepo",
+    "conventional-commits"
+  ],
+  "license": "MIT"
+}

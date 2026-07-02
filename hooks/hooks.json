@@ -1,0 +1,18 @@
+{
+  "description": "my-fe-harness 안전장치 강제 — 하드코딩 비밀·비밀 파일 커밋·치명적 삭제를 PreToolUse에서 차단(정상 흐름 무간섭, 오류 시 통과)",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/safety-guard.mjs"],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
