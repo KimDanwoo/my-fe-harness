@@ -11,14 +11,16 @@ description: 프론트엔드 컨벤션·안전장치 하네스. TypeScript·Reac
 - 옵션(필요 시): `a11y` · `styling` · `forms` · `frontend` · `testing` · `commit` · `monorepo`
 - 구조 팩(하나만 선택): `fsd` · `feature-based` · `layered`
 
-영구 적용: `/my-fe-harness:install` (권장 `add core react`) → `.claude/rules/`. 구조: `/my-fe-harness:scaffold`. 목록: `/my-fe-harness:list`.
+영구 적용: `/my-fe-harness:install` (권장 `add core react`) → `.claude/rules/`. 구조: `/my-fe-harness:scaffold`. 목록: `/my-fe-harness:list`. 현황: `/my-fe-harness:status`. 갱신: `/my-fe-harness:update`(안 건드린 규칙만 최신화). 걷어내기: `/my-fe-harness:uninstall`(모두 해시 검증 — 수정본 보존).
+
+설치 시 `package.json` 스택을 감지해 `.claude/rules/_stack.md`에 기록한다. 스택 전용 규칙(`react`·`vue`·`monorepo`)은 파일 상단 "적용 조건"으로 다른 스택에서 스스로 비활성화되니, 프로젝트 스택과 맞지 않는 규칙은 적용하지 말 것.
 
 과잉 제약 없이 깔끔한 스타일이 나오게 — 규칙은 원칙 몇 줄이고 경로 스코핑되어 관련 파일에만 로드된다.
 `safety`는 권고 위에 **강제 계층**(`PreToolUse` 훅)이 있어 하드코딩 비밀·비밀 파일 커밋·`rm -rf` 루트/홈을 실행 전 차단한다 — 애초에 그렇게 짜지 않는다.
 
 ## 코어 요약 (항상 챙김)
 
-- **안전장치**: 비밀을 코드·번들·로그에 노출 금지(`NEXT_PUBLIC_`/`VITE_`=공개), 외부 입력 검증, `dangerouslySetInnerHTML`/`v-html` 금지, 없는 패키지·API 지어내지 않기.
+- **안전장치**: 비밀을 코드·번들·로그에 노출 금지(`NEXT_PUBLIC_`/`VITE_`=공개), 외부 입력 검증, `dangerouslySetInnerHTML`/`v-html` 금지, `target=_blank`엔 `rel=noopener`, env는 부팅 시 스키마 검증, 없는 패키지·API 지어내지 않기.
 - **TypeScript**: `type` 우선·`any` 금지(→`unknown` 좁히기), enum 대신 union 리터럴, 공개 경계 배럴(deep import 금지), import 순서 외부→절대→상대.
 - **좋은 패턴**: early return(중첩 3단계 금지), 선언형 체인, 조건에 이름, if/switch 대신 매핑, 흐름 설명 주석 금지, 매직넘버 상수화.
 - **React**: 함수 컴포넌트·`React.FC` 지양, 비동기는 React Query(useEffect 패칭 금지), 파생값은 렌더 중 계산, 전역은 최소.
