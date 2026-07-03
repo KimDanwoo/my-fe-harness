@@ -24,7 +24,7 @@ app → pages → widgets → features → entities → shared
 - 슬라이스는 공개 API(`index.ts`)로만 노출 — 외부에서 내부 파일 deep import 금지.
 - 슬라이스 내부 세그먼트는 `ui` / `model` / `api` / `lib` 중 필요한 것만 만든다.
 - shared에는 도메인 지식을 두지 않는다.
-- 슬라이스 간 참조가 필요해지면 상위 레이어에서 조합하거나 entities `@x` 표기를 검토한다.
+- 같은 레이어 슬라이스 간 참조가 불가피하면(주로 entities 간) **cross-import 공개 API `@x`**로만: 소비 대상 슬라이스가 `entities/A/@x/B.ts`를 통해 B에게만 노출. 일반 `index.ts` deep import로 옆 슬라이스를 끌어오지 않는다. 그 외엔 상위 레이어에서 조합.
 
 ## 시작 규칙
 

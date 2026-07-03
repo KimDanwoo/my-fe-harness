@@ -9,6 +9,8 @@ paths:
 
 # 모노레포 — 핵심 (pnpm workspace)
 
+> 적용 조건: **모노레포에만**(`apps/`+`packages/` 또는 `pnpm-workspace.yaml`/`turbo.json`/`nx.json` 존재). 단일 패키지 프로젝트면 무시한다.
+
 - 구조: `apps/`(배포 단위) · `packages/`(공유 코드). `apps → packages` 단방향, 역참조·순환 금지.
 - 내부 참조는 `workspace:*`. 패키지는 공개 API(`exports`/`index.ts`)로만 소비, deep import 금지.
 - 공용 설정(tsconfig·eslint)은 `packages/config-*`에 두고 extends. 루트엔 전역 스크립트·devDeps만.

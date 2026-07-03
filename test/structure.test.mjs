@@ -39,6 +39,14 @@ test('plugin/marketplace/hooks JSON are valid', () => {
     assert.doesNotThrow(() => JSON.parse(fs.readFileSync(r(f), 'utf8')), `invalid JSON: ${f}`)
 })
 
+// 릴리스 drift 방지: package.json과 plugin.json 버전은 항상 일치해야 한다.
+test('package.json and plugin.json versions are in sync', () => {
+  const pkg = JSON.parse(fs.readFileSync(r('package.json'), 'utf8')).version
+  const plugin = JSON.parse(fs.readFileSync(r('.claude-plugin/plugin.json'), 'utf8')).version
+  assert.equal(pkg, plugin, `version drift: package.json=${pkg} plugin.json=${plugin}`)
+  assert.match(pkg, /^\d+\.\d+\.\d+/, 'semver 형식')
+})
+
 test('hooks.json references the existing guard script', () => {
   const hooks = fs.readFileSync(r('hooks/hooks.json'), 'utf8')
   assert.ok(hooks.includes('safety-guard.mjs'))

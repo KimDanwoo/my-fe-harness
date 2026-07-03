@@ -9,11 +9,36 @@ const FRAMEWORK_DEPS = {
 }
 
 export function detectFrameworks(targetDir) {
-  const deps = readDeps(targetDir)
+  return frameworksFromDeps(readDeps(targetDir))
+}
+
+function frameworksFromDeps(deps) {
   if (!deps) return []
   return Object.entries(FRAMEWORK_DEPS)
     .filter(([, names]) => names.some((name) => name in deps))
     .map(([framework]) => framework)
+}
+
+// 스택 스탬프(_stack.md)용 요약: 프레임워크 + Next/모노레포 여부. package.json은 한 번만 읽는다.
+export function detectStack(targetDir) {
+  const deps = readDeps(targetDir) ?? {}
+  const has = (name) => name in deps
+  return {
+    frameworks: frameworksFromDeps(deps),
+    nextjs: has('next'),
+    monorepo:
+      has('turbo') ||
+      has('nx') ||
+      fs.existsSync(path.join(targetDir, 'pnpm-workspace.yaml')) ||
+      fs.existsSync(path.join(targetDir, 'turbo.json')) ||
+      fs.existsSync(path.join(targetDir, 'nx.json')) ||
+      (fs.existsSync(path.join(targetDir, 'apps')) && fs.existsSync(path.join(targetDir, 'packages'))),
+  }
+}
+
+// 감지된 스택이 하나도 없는지(비-프론트엔드/비-Node 프로젝트) 판별.
+export function isStackEmpty(stack) {
+  return stack.frameworks.length === 0 && !stack.nextjs && !stack.monorepo
 }
 
 function readDeps(targetDir) {

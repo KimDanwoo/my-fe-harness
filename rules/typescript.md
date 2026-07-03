@@ -10,6 +10,15 @@ paths:
 - `type` 우선(확장 필요 시만 `interface`). `any` 금지 — `unknown`으로 받고 좁힌다.
 - 외부 입력(API·폼·URL)은 런타임 검증(zod 등) 후 타입 확정. `as` 단언은 최후 수단(타입 가드 우선).
 - `enum` 대신 union 리터럴 + `as const`. 공개(export) 함수는 반환 타입 명시.
+- 상태·응답처럼 형태가 갈리는 값은 **판별 유니온**(공통 태그 필드)으로 모델링 — 불법 상태를 타입으로 차단하고 `switch`에서 `never`로 완전성 검사.
+
+```ts
+// ✅ 판별 유니온 — 로딩 중에 data가 존재할 수 없음이 타입으로 보장됨
+type Result =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'success'; data: User }
+```
 
 ## 네이밍 · 구조
 
