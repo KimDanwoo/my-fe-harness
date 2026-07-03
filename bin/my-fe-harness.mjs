@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { runInit, runAdd, runScaffold, runGuard, printList, printHelp } from '../src/commands.mjs'
+import { runInit, runAdd, runScaffold, runGuard, runUninstall, runStatus, runUpdate, printList, printHelp } from '../src/commands.mjs'
+import { PACKAGE_VERSION } from '../src/version.mjs'
 
 function printVersion() {
-  const pkgPath = fileURLToPath(new URL('../package.json', import.meta.url))
-  const { version } = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-  console.log(`my-fe-harness ${version}`)
+  console.log(`my-fe-harness ${PACKAGE_VERSION}`)
 }
 
 async function main() {
@@ -53,6 +50,13 @@ async function main() {
       return runScaffold(['fsd'], options)
     case 'guard':
       return runGuard(options)
+    case 'uninstall':
+    case 'unsync':
+      return runUninstall(options)
+    case 'status':
+      return runStatus(options)
+    case 'update':
+      return runUpdate(options)
     case 'list':
       return printList()
     default:
