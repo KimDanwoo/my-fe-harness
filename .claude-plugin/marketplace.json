@@ -8,7 +8,7 @@
     {
       "name": "my-fe-harness",
       "source": "./",
-      "description": "규칙 팩 설치(/install)와 FSD 스캐폴드(/fsd)를 제공하는 컨벤션 하네스.",
+      "description": "안전장치 강제 훅(/guard)과 규칙 팩 설치(/install)·구조 스캐폴드(/scaffold)를 제공하는 프론트엔드 컨벤션 하네스.",
       "category": "productivity",
       "keywords": ["conventions", "typescript", "react", "vue", "fsd", "monorepo", "commit"]
     }

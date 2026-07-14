@@ -26,6 +26,14 @@ export function hashFile(file) {
   return sha256(fs.readFileSync(file))
 }
 
+// 원자적 쓰기: 같은 디렉토리에 임시 파일로 쓴 뒤 rename 한다.
+// 쓰기 도중 중단돼도 대상 파일(설정·매니페스트)이 반쯤 쓰인 상태로 손상되지 않는다.
+export function writeFileAtomic(file, content) {
+  const tmp = `${file}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, content)
+  fs.renameSync(tmp, file)
+}
+
 export function readManifest(claudeDir) {
   const file = manifestPath(claudeDir)
   if (!fs.existsSync(file)) return emptyManifest()
@@ -45,7 +53,7 @@ export function readManifest(claudeDir) {
 
 export function writeManifest(claudeDir, manifest) {
   fs.mkdirSync(claudeDir, { recursive: true })
-  fs.writeFileSync(manifestPath(claudeDir), `${JSON.stringify(manifest, null, 2)}\n`)
+  writeFileAtomic(manifestPath(claudeDir), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 function emptyManifest() {
