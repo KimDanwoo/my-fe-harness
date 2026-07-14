@@ -9,7 +9,7 @@ import { writeStackStamp } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
 import { scaffoldStructure } from './scaffold.mjs'
 import { detectFrameworks } from './detect.mjs'
-import { hashFile, readManifest, writeManifest, resolveClaudeDir } from './manifest.mjs'
+import { hashFile, readManifest, writeManifest, resolveClaudeDir, manifestPath } from './manifest.mjs'
 import { PACKAGE_VERSION } from './version.mjs'
 import { promptPackSelection, promptStructureSelection } from './prompt.mjs'
 
@@ -193,6 +193,11 @@ export function runStatus(options) {
 }
 
 export function runUpdate(options) {
+  // 설치 기록이 없으면 아무것도 하지 않는다(빈 매니페스트를 새로 만드는 부작용 방지).
+  if (!fs.existsSync(manifestPath(resolveClaudeDir(options)))) {
+    console.log(`\n업데이트${options.global ? ' [전역]' : ''} — 설치 기록이 없습니다. 먼저 add 하세요.`)
+    return
+  }
   withManifest(options, (manifest) => {
     const claudeDir = resolveClaudeDir(options)
     const rulesDir = path.join(claudeDir, 'rules')

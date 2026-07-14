@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { GUARD_MARK } from './installHook.mjs'
-import { hashFile, isInside, manifestPath, readManifest } from './manifest.mjs'
+import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
 // 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
 // 해시가 다르면(사용자 수정) 보존하고, 경로가 .claude 밖이면(변조된 매니페스트) 건너뛴다.
@@ -83,7 +83,7 @@ function stripHookEntry(settingsPath, mark, dryRun) {
   else delete settings.hooks.PreToolUse
   if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks
 
-  if (!dryRun) fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+  if (!dryRun) writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   return 'removed'
 }
 

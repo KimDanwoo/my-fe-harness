@@ -53,6 +53,16 @@ test('hooks.json references the existing guard script', () => {
   assert.ok(fs.existsSync(r('scripts/safety-guard.mjs')))
 })
 
+// 드리프트 방지: installHook의 MATCHER(npx 설치)와 hooks.json의 matcher(플러그인 설치)는 같아야
+// 두 설치 경로가 동일한 도구 집합을 가드한다.
+test('installHook MATCHER matches plugin hooks.json matcher', () => {
+  const pluginMatcher = JSON.parse(fs.readFileSync(r('hooks/hooks.json'), 'utf8')).hooks.PreToolUse[0].matcher
+  const src = fs.readFileSync(r('src/installHook.mjs'), 'utf8')
+  const m = src.match(/const MATCHER = '([^']+)'/)
+  assert.ok(m, 'installHook.mjs 에서 MATCHER 상수를 찾지 못했습니다')
+  assert.equal(m[1], pluginMatcher, 'matcher 드리프트: installHook.mjs 와 hooks.json')
+})
+
 test('no stale "claude-harness" references remain', () => {
   let stale = []
   const scan = (dir) => {

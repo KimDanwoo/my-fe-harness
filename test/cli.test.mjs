@@ -246,6 +246,22 @@ test('update refreshes an unmodified stale rule to latest source', () =>
     assert.notEqual(fs.readFileSync(dest, 'utf8'), '# 구버전\n', '최신 원본으로 교체')
   }))
 
+test('update on a fresh dir is a no-op and writes no manifest', () =>
+  withTmp((d) => {
+    const { out } = cli(['update', '--target', d])
+    assert.match(out, /설치 기록이 없습니다/)
+    assert.ok(!fs.existsSync(path.join(d, '.claude/.my-fe-harness-manifest.json')), '빈 매니페스트를 만들지 않는다')
+  }))
+
+test('guard errors on non-object settings.json (array)', () =>
+  withTmp((d) => {
+    fs.mkdirSync(path.join(d, '.claude'), { recursive: true })
+    fs.writeFileSync(path.join(d, '.claude/settings.json'), '[]')
+    const { code, out } = cli(['guard', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /객체가 아닙니다/)
+  }))
+
 test('update preserves user-modified rule', () =>
   withTmp((d) => {
     cli(['add', 'ts', '--target', d])

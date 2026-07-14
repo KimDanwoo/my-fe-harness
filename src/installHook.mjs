@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { hashFile } from './manifest.mjs'
+import { hashFile, writeFileAtomic } from './manifest.mjs'
 
 const GUARD_SRC = fileURLToPath(new URL('../scripts/safety-guard.mjs', import.meta.url))
 const GUARD_REL = '.claude/hooks/safety-guard.mjs'
@@ -27,7 +27,7 @@ export function installHook({ targetDir, force = false, dryRun = false, global =
     if (!already) {
       addGuardHook(settings, commandArg)
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
-      fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+      writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
     }
     // 매니페스트에 훅 소유권 기록(파일 쓰기는 호출자가 일괄 수행): uninstall이 스크립트 해시를 검증해 삭제한다.
     // 스크립트를 실제로 쓰지 않았다면(kept) 디스크의 실제 해시를 기록해야
@@ -46,11 +46,17 @@ export function installHook({ targetDir, force = false, dryRun = false, global =
 
 function readJson(file) {
   if (!fs.existsSync(file)) return {}
+  let parsed
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'))
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
   } catch {
     throw new Error(`${file} 파싱 실패 — 유효한 JSON이 아닙니다. 수동으로 확인 후 다시 시도하세요.`)
   }
+  // 배열·스칼라(유효 JSON이지만 객체 아님)에 훅을 병합하면 조용히 유실되므로 막는다.
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${file} 형식 오류 — 최상위가 JSON 객체가 아닙니다. 수동으로 확인 후 다시 시도하세요.`)
+  }
+  return parsed
 }
 
 function hasGuardHook(settings) {
