@@ -5,8 +5,9 @@ import { PACKS, rulePacks, resolvePacks, withSafety } from './packs.mjs'
 import { STRUCTURES, resolveStructure } from './structures.mjs'
 import { installRules, rulesBase, ruleSourcePath } from './installRules.mjs'
 import { installHook } from './installHook.mjs'
-import { writeStackStamp } from './stack.mjs'
+import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
+import { checkStructure } from './check.mjs'
 import { scaffoldStructure } from './scaffold.mjs'
 import { detectFrameworks } from './detect.mjs'
 import { hashFile, readManifest, writeManifest, resolveClaudeDir, manifestPath } from './manifest.mjs'
@@ -190,6 +191,37 @@ export function runStatus(options) {
   }
   const modified = entries.filter(({ file, sha, dir }) => diskStatus(path.join(dir, file), sha) === 'modified')
   if (modified.length > 0) console.log(`\n  ⚠ 수정된 파일 ${modified.length}개 — uninstall/update 시 보존됩니다.`)
+
+  // 스탬프는 설치 시점 스냅샷이라 의존성·구조가 바뀌면 낡는다. 낡았을 때만 알린다(평소 무간섭).
+  if (stampState({ ...options, base: rulesBase(options) }, manifest) === 'stale') {
+    console.log('\n  ⚠ _stack.md 가 낡았습니다 — 의존성·구조·alias가 설치 후 바뀌었습니다. update 로 갱신하세요.')
+  }
+}
+
+// 규칙은 설치 시점 스냅샷이고 코드는 그 뒤로 자란다 — 지금 코드가 그 규칙을 지키는지 되읽는다.
+export function runCheck(options) {
+  const { structure, files, violations } = checkStructure(options)
+  if (!structure) {
+    console.log('\n구조 점검 — 설치된 폴더 구조 팩이 없습니다. `scaffold` 로 구조를 먼저 고르세요.')
+    return
+  }
+
+  console.log(`\n구조 점검 [${structure.id}] — src/ 코드 파일 ${files}개\n`)
+  if (files === 0) {
+    console.log('  검사할 소스가 없습니다 (src/ 없음 또는 비어 있음).')
+    return
+  }
+  if (violations.length === 0) {
+    console.log('  ✔ 의존 방향 위반 없음')
+    return
+  }
+
+  for (const { file, line, specifier, reason } of violations) {
+    console.log(`  ✖ ${file}:${line}`)
+    console.log(`      ${specifier}  —  ${reason}`)
+  }
+  console.log(`\n  위반 ${violations.length}건 — .claude/rules/${structure.ruleFile} 의 의존 방향 규칙을 보세요.`)
+  process.exitCode = 1
 }
 
 export function runUpdate(options) {
@@ -313,6 +345,9 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
                         매니페스트 해시로 검증 — 우리가 쓴 그대로인 파일만 삭제,
                         직접 수정·생성한 파일은 보존
   status                이 프로젝트에 설치된 규칙·훅과 수정 여부 표시
+  check                 설치된 구조 팩의 의존 방향을 실제 src/ 코드에 대해 점검
+                        아래→위 import·옆 슬라이스 직접 참조·deep import를 파일:줄로 보고
+                        위반이 있으면 종료 코드 1 (CI에 걸 수 있음)
   update                사용자가 안 건드린 규칙만 최신 원본으로 갱신(수정본 보존)
   list                  사용 가능한 팩·구조 목록
   version               버전 출력 (-v, --version)

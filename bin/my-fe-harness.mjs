@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { runInit, runAdd, runScaffold, runGuard, runUninstall, runStatus, runUpdate, printList, printHelp } from '../src/commands.mjs'
+import { runInit, runAdd, runScaffold, runGuard, runUninstall, runStatus, runCheck, runUpdate, printList, printHelp } from '../src/commands.mjs'
 import { PACKAGE_VERSION } from '../src/version.mjs'
 
 function printVersion() {
@@ -55,6 +55,8 @@ async function main() {
       return runUninstall(options)
     case 'status':
       return runStatus(options)
+    case 'check':
+      return runCheck(options)
     case 'update':
       return runUpdate(options)
     case 'list':
