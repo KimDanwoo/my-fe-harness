@@ -196,6 +196,198 @@ test('_stack.md skipped when no FE stack detected', () =>
     assert.ok(!fs.existsSync(path.join(d, '.claude/rules/_stack.md')))
   }))
 
+// ---- 프로젝트 고유 컨벤션 감지 ----
+const seedProject = (d, { pkg = {}, tsconfig, srcDirs = [] } = {}) => {
+  fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify(pkg))
+  if (tsconfig !== undefined) fs.writeFileSync(path.join(d, 'tsconfig.json'), tsconfig)
+  for (const dir of srcDirs) fs.mkdirSync(path.join(d, 'src', dir), { recursive: true })
+}
+
+test('스탬프는 프로젝트가 실제로 쓰는 라이브러리·구조·alias를 기록한다', () =>
+  withTmp((d) => {
+    seedProject(d, {
+      pkg: {
+        dependencies: { react: '18', '@tanstack/react-query': '5', zod: '3', axios: '1' },
+        devDependencies: { tailwindcss: '3', vitest: '1' },
+      },
+      // 주석·트레일링 콤마가 있는 실제 tsconfig 형태.
+      tsconfig: '{\n  // paths\n  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },\n}',
+      srcDirs: ['entities', 'features', 'shared'],
+    })
+    cli(['add', 'core', 'react', '--target', d])
+
+    const stamp = readStamp(d)
+    assert.match(stamp, /데이터\/상태: @tanstack\/react-query/)
+    assert.match(stamp, /폼\/검증: zod/)
+    assert.match(stamp, /스타일: tailwindcss/)
+    assert.match(stamp, /테스트: vitest/)
+    assert.match(stamp, /API\/통신: axios/)
+    assert.match(stamp, /`src\/` 최상위: entities, features, shared/)
+    assert.match(stamp, /import alias: @\/\*/)
+  }))
+
+test('감지된 컨벤션이 없으면 컨벤션 섹션을 넣지 않는다', () =>
+  withTmp((d) => {
+    seedProject(d, { pkg: { dependencies: { react: '18' } } })
+    cli(['add', 'react', '--target', d])
+    const stamp = readStamp(d)
+    assert.match(stamp, /프레임워크: react/)
+    assert.ok(!stamp.includes('실제로 쓰는 것'))
+  }))
+
+test('프레임워크가 없어도 컨벤션이 있으면 스탬프를 쓴다', () =>
+  withTmp((d) => {
+    seedProject(d, { pkg: { dependencies: { zod: '3' } }, srcDirs: ['lib'] })
+    cli(['add', 'ts', '--target', d])
+    const stamp = readStamp(d)
+    assert.match(stamp, /폼\/검증: zod/)
+    assert.match(stamp, /`src\/` 최상위: lib/)
+  }))
+
+// 스탬프는 설치 시점 스냅샷이다 — 설치 후 라이브러리를 깔면 낡는다.
+test('설치 후 라이브러리를 추가하면 status가 스탬프 낡음을 알린다', () =>
+  withTmp((d) => {
+    seedProject(d, { pkg: { dependencies: { react: '18', jotai: '2' } } })
+    cli(['add', 'core', 'react', '--target', d])
+    assert.match(readStamp(d), /데이터\/상태: jotai/)
+    assert.ok(!cli(['status', '--target', d]).out.includes('낡았습니다'))
+
+    fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ dependencies: { react: '18', jotai: '2', zustand: '4' } }))
+    assert.match(cli(['status', '--target', d]).out, /낡았습니다/)
+
+    cli(['update', '--target', d])
+    assert.match(readStamp(d), /zustand/)
+    assert.ok(!cli(['status', '--target', d]).out.includes('낡았습니다'))
+  }))
+
+test('구조·alias가 바뀌어도 낡음으로 잡힌다', () =>
+  withTmp((d) => {
+    seedProject(d, { pkg: { dependencies: { react: '18' } }, srcDirs: ['shared'] })
+    cli(['add', 'react', '--target', d])
+    assert.ok(!cli(['status', '--target', d]).out.includes('낡았습니다'))
+
+    fs.mkdirSync(path.join(d, 'src/features'), { recursive: true })
+    assert.match(cli(['status', '--target', d]).out, /낡았습니다/)
+  }))
+
+test('스택이 없는 프로젝트에서는 낡음 경고를 하지 않는다', () =>
+  withTmp((d) => {
+    cli(['add', 'ts', '--target', d])
+    assert.ok(!cli(['status', '--target', d]).out.includes('낡았습니다'))
+  }))
+
+test('tsconfig가 깨져 있어도 설치는 성공하고 alias 줄만 빠진다', () =>
+  withTmp((d) => {
+    seedProject(d, { pkg: { dependencies: { react: '18', zod: '3' } }, tsconfig: '{ not json at all' })
+    const { code } = cli(['add', 'core', 'react', '--target', d])
+    assert.equal(code, 0)
+    const stamp = readStamp(d)
+    assert.match(stamp, /폼\/검증: zod/)
+    assert.ok(!stamp.includes('import alias'))
+  }))
+
+// ---- check: 구조 의존 방향 점검 ----
+const writeSrc = (d, files) => {
+  for (const [rel, body] of Object.entries(files)) {
+    const dest = path.join(d, 'src', rel)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.writeFileSync(dest, body)
+  }
+}
+const withAlias = (d) =>
+  fs.writeFileSync(path.join(d, 'tsconfig.json'), JSON.stringify({ compilerOptions: { paths: { '@/*': ['./src/*'] } } }))
+
+test('check: 구조 팩이 없으면 안내만 하고 실패시키지 않는다', () =>
+  withTmp((d) => {
+    cli(['add', 'ts', '--target', d])
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 0)
+    assert.match(out, /구조 팩이 없습니다/)
+  }))
+
+test('check: fsd 아래→위 import를 파일:줄로 잡고 종료 코드 1', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, { 'entities/user/ui/UserCard.tsx': "import { LoginForm } from '@/features/auth'\n" })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /entities\/user\/ui\/UserCard\.tsx:1/)
+    assert.match(out, /아래→위 import/)
+  }))
+
+test('check: 같은 레이어의 옆 슬라이스 직접 import를 잡는다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, { 'features/cart/model/store.ts': "import { toggleLike } from '@/features/like'\n" })
+
+    const { out } = cli(['check', '--target', d])
+    assert.match(out, /다른 슬라이스 직접 import/)
+  }))
+
+test('check: 슬라이스 내부 deep import를 잡되 배럴은 통과시킨다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'pages/HomePage.tsx': "import { userStore } from '@/entities/user/model/store'\n",
+      'widgets/header/ui/Header.tsx': "import { UserCard } from '@/entities/user'\n",
+    })
+
+    const { out } = cli(['check', '--target', d])
+    assert.match(out, /deep import/)
+    assert.ok(!out.includes('Header.tsx'))
+  }))
+
+test('check: 정상 코드는 위반 0건 — 상대경로·shared 내부·외부 패키지는 오탐하지 않는다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'features/cart/ui/CartButton.tsx': [
+        "import { useQuery } from '@tanstack/react-query'",
+        "import { Button } from '@/shared/ui/button/Button'",
+        "import { addToCart } from '../model/store'",
+        "import { ProductCard } from '@/entities/product'",
+        '',
+      ].join('\n'),
+      'features/cart/model/store.ts': 'export const addToCart = () => {}\n',
+    })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 0)
+    assert.match(out, /위반 없음/)
+  }))
+
+test('check: layered는 같은 계층 참조를 허용하고 방향 역전만 잡는다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'layered', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'hooks/useCart.ts': "import { fetchCart } from '@/api/cart'\n",
+      'components/UserBadge.tsx': "import { ProfilePage } from '@/pages/ProfilePage'\n",
+    })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /UserBadge\.tsx/)
+    assert.ok(!out.includes('useCart.ts'))
+  }))
+
+test('check: 여러 줄 import도 줄 번호를 정확히 보고한다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'entities/user/model/store.ts': ['export const a = 1', '', 'import {', '  LoginForm,', "} from '@/features/auth'", ''].join('\n'),
+    })
+
+    const { out } = cli(['check', '--target', d])
+    assert.match(out, /store\.ts:5/)
+  }))
+
 // ---- status ----
 test('status shows intact then modified', () =>
   withTmp((d) => {
