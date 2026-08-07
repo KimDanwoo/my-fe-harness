@@ -28,6 +28,20 @@ src/
 app → pages → features → shared
 ```
 
+```ts
+// ❌ feature가 옆 feature를 직접 import — 결합 시작, 구조 붕괴의 첫 신호
+// features/cart/hooks/useCart.ts
+import { useAuth } from '@/features/auth'
+
+// ❌ 배럴을 우회한 deep import
+import { cartStore } from '@/features/cart/model/store'
+
+// ✅ 조합은 pages에서 — 두 feature를 아는 건 pages뿐이다
+// pages/CheckoutPage.tsx
+import { LoginForm } from '@/features/auth'
+import { CartSummary } from '@/features/cart'
+```
+
 - **feature 간 직접 import 금지.** 필요하면 pages에서 조합하거나 공통 부분을 shared로 내린다.
 - feature 외부에서는 배럴(`features/auth/index.ts`)로만 import. 내부 파일 deep import 금지.
 - feature 내부끼리는 상대경로 직접 import (자기 배럴 경유 금지 — 순환).

@@ -25,6 +25,19 @@ src/
 pages → (components · hooks · api · stores) → (utils · types · constants)
 ```
 
+```ts
+// ❌ 하위 계층이 상위를 import — 방향 역전
+// components/UserBadge.tsx
+import { ProfilePage } from '@/pages/ProfilePage'
+
+// ❌ utils가 React·서버에 의존 — utils는 순수 함수만
+// utils/useDebounce.ts   ← 훅이면 hooks/로
+import { useState } from 'react'
+
+// ✅ 화면 전용 컴포넌트는 그 페이지에 co-locate
+// pages/checkout/components/CouponInput.tsx
+```
+
 - components가 pages를 import 금지. utils가 hooks·api를 import 금지.
 - 같은 계층 안에서의 참조는 허용하되 순환 금지.
 
