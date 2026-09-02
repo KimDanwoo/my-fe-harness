@@ -48,7 +48,7 @@ import { UserCard } from '@/entities/user'
 import { AddToCartButton } from '@/features/cart'
 ```
 
-- 슬라이스는 공개 API(`index.ts`)로만 노출. 슬라이스 내부끼리는 상대경로(자기 배럴 경유 금지 — 순환).
+- 슬라이스는 공개 API(`index.ts`)로만 노출. 슬라이스 내부에서 자기 배럴을 경유해 참조하지 않는다 — 순환 의존이 된다.
 - 슬라이스 내부 세그먼트는 `ui` / `model` / `api` / `lib` 중 **필요한 것만** 만든다.
 - 같은 레이어 슬라이스 간 참조가 불가피하면(주로 entities 간) **cross-import 공개 API `@x`**로만:
   `entities/A/@x/B.ts`로 B에게만 노출한다. 일반 `index.ts` deep import로 옆 슬라이스를 끌어오지 않는다.

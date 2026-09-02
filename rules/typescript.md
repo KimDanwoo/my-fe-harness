@@ -85,7 +85,7 @@ import { formatPrice } from '@/features/cart/lib/format/price'
 import { formatPrice } from '@/features/cart'
 ```
 
-- 공개 경계마다 `index.ts`, 외부는 배럴로만. `export *`·기계적 배럴 금지. 모듈 내부끼리는 상대경로.
+- 공개 경계마다 `index.ts`, 외부는 배럴로만. `export *`·기계적 배럴 금지.
 - import 순서: 외부 → 절대경로 → 상대경로. **순환 의존 금지.**
 
 ## 네이밍 · 시그니처
