@@ -44,7 +44,7 @@ import { CartSummary } from '@/features/cart'
 
 - **feature 간 직접 import 금지.** 필요하면 pages에서 조합하거나 공통 부분을 shared로 내린다.
 - feature 외부에서는 배럴(`features/auth/index.ts`)로만 import. 내부 파일 deep import 금지.
-- feature 내부끼리는 상대경로 직접 import (자기 배럴 경유 금지 — 순환).
+- feature 내부에서 자기 배럴을 경유해 참조하지 않는다 — 순환 의존이 된다.
 
 ## 배치 결정 규칙 — "이 코드 어디에 두지?"
 
