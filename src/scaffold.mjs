@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export function scaffoldStructure(structure, { targetDir, dryRun = false }) {
-  return structure.dirs.map((dir) => {
+  return structure.dirs.filter((dir) => dir.scaffold !== false).map((dir) => {
     const dirPath = path.join(targetDir, 'src', dir.name)
     const readme = path.join(dirPath, 'README.md')
     const exists = fs.existsSync(readme)

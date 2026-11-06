@@ -86,7 +86,7 @@ LLM에게는 "이렇게 하라"는 문장보다 **틀린 코드와 옳은 코드
 
 | 구조 | 별칭 | 적합 규모 | 의존 방향 |
 |---|---|---|---|
-| `fsd` | | 중·대규모 | `app→pages→widgets→features→entities→shared` |
+| `fsd` | | 중·대규모 | `app→pages→features→entities→shared` (widgets는 [공식 비권장](https://github.com/feature-sliced/documentation/pull/933) — 기존 프로젝트만 검사) |
 | `feature-based` | `feature` | 중규모 | `app→pages→features→shared` (기능 단위 응집) |
 | `layered` | `classic` | 소규모·프로토타입 | `pages→(components·hooks·api·stores)→(utils·types·constants)` |
 
