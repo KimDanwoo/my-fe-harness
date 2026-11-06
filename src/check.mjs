@@ -26,14 +26,14 @@ export function checkStructure(options) {
 
   for (const file of walk(srcDir)) {
     files += 1
-    const from = locate(toPosix(path.relative(srcDir, file)))
+    const from = locate(toPosix(path.relative(srcDir, file)), srcDir)
     if (!ranks.has(from.layer)) continue
 
     for (const { specifier, line } of importsOf(fs.readFileSync(file, 'utf8'))) {
       const targetRel = resolveToSrc(specifier, { fileDir: path.dirname(file), srcDir, aliases, targetDir: options.targetDir })
       if (!targetRel) continue
 
-      const reason = violationFor(from, locate(targetRel), structure, ranks)
+      const reason = violationFor(from, locate(targetRel, srcDir), structure, ranks)
       if (reason) violations.push({ file: `src/${from.rel}`, line, specifier, reason })
     }
   }
@@ -48,7 +48,7 @@ function violationFor(from, to, structure, ranks) {
   }
   if (!structure.sliceLayers.includes(to.layer)) return null
   if (from.layer === to.layer) {
-    if (from.slice === to.slice) return null
+    if (from.slice === to.slice || isLayerBarrel(from)) return null
     return `같은 레이어의 다른 슬라이스 직접 import — ${to.layer}/${to.slice}`
   }
   if (to.segments.length > 2 && !to.segments[2].startsWith('index')) {
@@ -58,10 +58,21 @@ function violationFor(from, to, structure, ranks) {
 }
 
 // 'entities/user/ui/Card.tsx' → 레이어 entities, 슬라이스 user.
-function locate(rel) {
+// 레이어 바로 아래 '파일'은 첫 '.' 앞이 슬라이스다 — 'pages/Home.test.tsx'와 'pages/Home'은 같은 슬라이스.
+// 디렉터리('features/user.profile')는 이름 그대로 슬라이스다.
+function locate(rel, srcDir) {
   const segments = rel.split('/')
-  return { rel, segments, layer: segments[0], slice: segments[1] }
+  const isLayerRootFile = segments.length === 2 && !isDirectory(path.join(srcDir, rel))
+  const slice = isLayerRootFile ? segments[1].split('.')[0] : segments[1]
+  return { rel, segments, layer: segments[0], slice }
 }
+
+const isDirectory = (abs) => fs.statSync(abs, { throwIfNoEntry: false })?.isDirectory() ?? false
+
+// 'pages/index.ts'처럼 레이어 루트의 JSX 없는 배럴은 슬라이스가 아니라 레이어 공개 API다(라우팅용 re-export).
+// 'index.tsx'(화면)·'index.service.ts'(보조 파일)는 슬라이스로 검사한다.
+const LAYER_BARREL_RE = /^index\.[cm]?[jt]s$/
+const isLayerBarrel = (location) => location.segments.length === 2 && LAYER_BARREL_RE.test(location.segments[1])
 
 // specifier를 src 기준 상대경로로 푼다. src 밖이거나 외부 패키지면 null(검사 대상 아님).
 function resolveToSrc(specifier, { fileDir, srcDir, aliases, targetDir }) {

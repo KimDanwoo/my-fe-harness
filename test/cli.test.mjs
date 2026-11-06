@@ -75,10 +75,16 @@ for (const s of ['fsd', 'feature-based', 'layered']) {
       assert.ok(rules(d).includes(`${s}.md`))
       assert.ok(rules(d).includes('safety.md'))
       const srcDirs = fs.existsSync(path.join(d, 'src')) ? fs.readdirSync(path.join(d, 'src')) : []
-      assert.ok(srcDirs.length >= 4)
+      assert.ok(srcDirs.length >= 3)
       assert.ok(fs.existsSync(path.join(d, 'src', srcDirs[0], 'README.md')))
     }))
 }
+
+test('scaffold fsd: pages-first — app·pages·shared만 만든다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    assert.deepEqual(fs.readdirSync(path.join(d, 'src')).sort(), ['app', 'pages', 'shared'])
+  }))
 
 test('dry-run writes nothing', () =>
   withTmp((d) => {
@@ -333,12 +339,74 @@ test('check: 슬라이스 내부 deep import를 잡되 배럴은 통과시킨다
     withAlias(d)
     writeSrc(d, {
       'pages/HomePage.tsx': "import { userStore } from '@/entities/user/model/store'\n",
+      // widgets는 스캐폴드하지 않지만 기존 프로젝트의 widgets도 계속 검사한다
       'widgets/header/ui/Header.tsx': "import { UserCard } from '@/entities/user'\n",
     })
 
     const { out } = cli(['check', '--target', d])
     assert.match(out, /deep import/)
     assert.ok(!out.includes('Header.tsx'))
+  }))
+
+test('check: 스캐폴드하지 않는 레거시 widgets도 의존 방향·슬라이스 격리를 검사한다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'features/cart/ui/Cart.tsx': "import { Header } from '@/widgets/header'\n",
+      'widgets/header/ui/Header.tsx': "import { Footer } from '@/widgets/footer'\n",
+      'pages/home/ui/Home.tsx': "import { Header } from '@/widgets/header/ui/Header'\n",
+    })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /features 는 widgets 를 참조할 수 없다/)
+    assert.match(out, /다른 슬라이스 직접 import — widgets\/footer/)
+    assert.match(out, /deep import — 공개 API\(widgets\/header\)/)
+  }))
+
+test('check: pages도 슬라이스 격리 — 옆 페이지 직접 import를 잡는다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, { 'pages/home/ui/Home.tsx': "import { AboutPage } from '@/pages/about'\n" })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /다른 슬라이스 직접 import — pages\/about/)
+  }))
+
+test('check: 평평한 페이지 파일의 co-location과 레이어 루트 배럴은 오탐하지 않는다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'pages/HomePage.tsx': "import { styles } from './HomePage.styles'\n",
+      'pages/HomePage.styles.ts': 'export const styles = {}\n',
+      'pages/HomePage.test.tsx': "import { HomePage } from './HomePage'\n",
+      'pages/index.ts': "export { HomePage } from './HomePage'\nexport { AboutPage } from './about'\n",
+      'app/router.tsx': "import { HomePage } from '@/pages'\n",
+    })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 0, out)
+  }))
+
+test('check: 배럴이 아닌 index 파일과 점이 든 디렉터리 슬라이스는 그대로 검사한다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, {
+      'pages/index.tsx': "import { AboutPage } from './about'\n",
+      'features/index.service.ts': "import { login } from './auth'\n",
+      'features/user.profile/index.ts': 'export const Profile = null\n',
+      'features/user/ui/User.tsx': "import { Profile } from '@/features/user.profile'\n",
+    })
+
+    const { out } = cli(['check', '--target', d])
+    assert.match(out, /pages\/index\.tsx/)
+    assert.match(out, /features\/index\.service\.ts/)
+    assert.match(out, /다른 슬라이스 직접 import — features\/user\.profile/)
   }))
 
 test('check: 정상 코드는 위반 0건 — 상대경로·shared 내부·외부 패키지는 오탐하지 않는다', () =>

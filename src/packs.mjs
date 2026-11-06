@@ -101,7 +101,7 @@ export const PACKS = [
     aliases: [],
     file: 'fsd.md',
     title: 'FSD 아키텍처',
-    description: '중·대규모 — app→pages→widgets→features→entities→shared 레이어 규칙',
+    description: '중·대규모 — app→pages→features→entities→shared 레이어 규칙 (pages-first)',
   },
   {
     id: 'feature-based',

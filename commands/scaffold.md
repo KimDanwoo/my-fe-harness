@@ -6,7 +6,7 @@ argument-hint: "[fsd | feature-based | layered]"
 현재 프로젝트에 폴더 구조를 스캐폴드하라.
 
 1. 인자 `$ARGUMENTS`가 비어 있으면 세 구조의 차이를 보여주고 무엇을 쓸지 물어본다:
-   - `fsd` — 중·대규모. app→pages→widgets→features→entities→shared
+   - `fsd` — 중·대규모. app→pages→features→entities→shared (pages-first: app·pages·shared만 생성, widgets는 공식 비권장)
    - `feature-based` — 중규모. app→pages→features→shared (기능 단위 응집)
    - `layered` — 소규모·프로토타입. pages/components/hooks/api 기술 계층
 2. 구조가 정해지면 실행한다:

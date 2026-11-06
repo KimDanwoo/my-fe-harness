@@ -1,20 +1,21 @@
 // rank = 의존 방향(작을수록 상위). 상위는 하위를 import할 수 있고 그 반대는 위반이다 — `check` 명령의 근거.
 // sliceLayers = 슬라이스 단위로 격리되는 레이어. 같은 레이어의 다른 슬라이스 직접 import와
 // 슬라이스 내부 deep import가 여기서만 위반이 된다(shared처럼 슬라이스 개념이 없는 레이어는 제외).
+// scaffold: false = scaffold 시 기본 생성하지 않는 레이어. check 판정에는 영향 없다.
 export const STRUCTURES = [
   {
     id: 'fsd',
     aliases: [],
     ruleFile: 'fsd.md',
     title: 'FSD (Feature-Sliced Design)',
-    description: '중·대규모. 레이어 단방향: app→pages→widgets→features→entities→shared',
-    sliceLayers: ['widgets', 'features', 'entities'],
+    description: '중·대규모. 레이어 단방향: app→pages→features→entities→shared (widgets는 레거시)',
+    sliceLayers: ['pages', 'widgets', 'features', 'entities'],
     dirs: [
       { name: 'app', rank: 0, purpose: '진입점 — 프로바이더, 라우팅 설정, 전역 스타일', note: 'import 가능: pages 이하 전부' },
-      { name: 'pages', rank: 1, purpose: '라우트 단위 조립 (Next.js 사용 시 views로 개명 권장)', note: 'import 가능: widgets 이하' },
-      { name: 'widgets', rank: 2, purpose: '페이지를 구성하는 독립 UI 블록', note: 'import 가능: features 이하' },
-      { name: 'features', rank: 3, purpose: '사용자 행동 단위 (검색, 좋아요, 로그인)', note: 'import 가능: entities 이하' },
-      { name: 'entities', rank: 4, purpose: '도메인 모델 (user, product 등)', note: 'import 가능: shared만' },
+      { name: 'pages', rank: 1, purpose: '라우트 단위 조립 (Next.js 사용 시 views로 개명 권장)', note: 'import 가능: features 이하 (widgets가 있으면 widgets 이하)' },
+      { name: 'widgets', rank: 2, scaffold: false, purpose: '레거시 — 공식 비권장(2026-07). 기존 프로젝트만 유지', note: 'import 가능: features 이하' },
+      { name: 'features', rank: 3, scaffold: false, purpose: '사용자 행동 단위 (검색, 좋아요, 로그인)', note: 'import 가능: entities 이하' },
+      { name: 'entities', rank: 4, scaffold: false, purpose: '도메인 모델 (user, product 등)', note: 'import 가능: shared만' },
       { name: 'shared', rank: 5, purpose: '프레임워크 무관 공용 코드 (ui-kit, lib, config)', note: 'import 가능: 없음 (최하위)' },
     ],
   },

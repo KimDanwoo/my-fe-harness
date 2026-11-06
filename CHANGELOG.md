@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **FSD: widgets 레이어 비권장 반영** — FSD 공식 문서가 widgets를 기본 레이어에서 뺐다
+  ([feature-sliced/documentation#933](https://github.com/feature-sliced/documentation/pull/933), 2026-07-29).
+  `fsd.md` 기본 레이어를 `app→pages→features→entities→shared`로 바꾸고, 화면 전용 조합은 pages·
+  공용 동작은 features·맥락 없는 UI는 shared·앱 레이아웃은 app으로 배치 규칙을 고쳤다. 공식
+  [feature-sliced/skills](https://github.com/feature-sliced/skills)의 pages-first("두 곳에서 쓴다는 이유만으로
+  레이어를 만들지 않는다")와 추출 3조건(지금 여러 곳에서 사용·독립된 변경 이유·응집된 책임)도 넣어,
+  화면 전용 로직은 pages에 두는 것을 기본으로 했다. `scaffold fsd`는 `app·pages·shared`만 만든다
+  (빈 features·entities·widgets 폴더 생성 안 함). `check`는 그대로 다섯 레이어와 기존 프로젝트의
+  `widgets/`까지 같은 의존 방향으로 검사한다.
+
+### Fixed
+
+- **`check`: FSD `pages` 슬라이스 격리 누락** — `pages/a`가 `pages/b`를 직접 import해도 통과하던 문제.
+  pages-first에서 코드가 pages에 모이므로 페이지 간 결합을 잡도록 pages를 슬라이스 레이어에 넣었다.
+  레이어 바로 아래 평평한 파일은 첫 `.` 앞을 슬라이스로 보고(`Home.tsx`·`Home.test.tsx`·`Home.styles.ts`는
+  같은 슬라이스), 레이어 루트 배럴(`pages/index.ts`)의 re-export는 위반으로 보지 않는다.
+
 ### Added
 
 - **프로젝트 고유 컨벤션 감지** — `_stack.md` 스탬프가 "이 프로젝트가 실제로 쓰는 것"을 함께 기록한다:
