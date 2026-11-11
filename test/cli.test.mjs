@@ -10,6 +10,8 @@ import { hashFile, readManifest } from '../src/manifest.mjs'
 import { PACKAGE_VERSION } from '../src/version.mjs'
 
 const BIN = fileURLToPath(new URL('../bin/my-fe-harness.mjs', import.meta.url))
+// 전역 테스트가 실제 Codex 홈을 건드리지 않게 — 자식 프로세스는 sandboxed HOME/.codex만 본다.
+delete process.env.CODEX_HOME
 
 function cli(args, { input = '', env } = {}) {
   const r = spawnSync('node', [BIN, ...args], { encoding: 'utf8', input, env: env ?? process.env })
@@ -655,4 +657,148 @@ test('uninstall refuses to delete files outside .claude via tampered manifest', 
     const { out } = cli(['uninstall', '--target', d])
     assert.ok(fs.existsSync(victim), '경로 탈출 대상은 삭제되지 않아야 한다')
     assert.match(out, /경로 밖/)
+  }))
+
+// ---- AGENTS.md 규칙 블록 (Codex 등) ----
+const AGENTS_START = '<!-- my-fe-harness:start -->'
+const agentsMd = (d) => path.join(d, 'AGENTS.md')
+const readAgents = (d) => fs.readFileSync(agentsMd(d), 'utf8')
+const countStart = (text) => text.split(AGENTS_START).length - 1
+
+test('add writes AGENTS.md block with rule bodies and scope lines, no frontmatter', () =>
+  withTmp((d) => {
+    cli(['add', 'core', 'react', '--target', d])
+    const text = readAgents(d)
+    assert.equal(countStart(text), 1)
+    assert.match(text, /<!-- my-fe-harness:end -->/)
+    assert.match(text, /# 안전장치/)
+    assert.match(text, /# React — 핵심\n\n> 적용 대상: `\*\*\/\*\.\{tsx,jsx\}`/)
+    assert.doesNotMatch(text, /^paths:/m)
+    assert.ok(text.indexOf('# 안전장치') < text.indexOf('# TypeScript'), 'safety comes first')
+  }))
+
+test('AGENTS.md: user content preserved and re-add keeps a single block', () =>
+  withTmp((d) => {
+    fs.writeFileSync(agentsMd(d), '# 팀 메모\n\n직접 쓴 내용\n')
+    cli(['add', 'core', '--target', d])
+    cli(['add', 'react', '--target', d])
+    const text = readAgents(d)
+    assert.ok(text.startsWith('# 팀 메모\n\n직접 쓴 내용\n'))
+    assert.equal(countStart(text), 1)
+    assert.match(text, /# React — 핵심/, 'later add is merged into the same block')
+  }))
+
+test('AGENTS.md: --no-agents and --dry-run write nothing', () =>
+  withTmp((d) => {
+    cli(['add', 'core', '--target', d, '--no-agents'])
+    assert.ok(!fs.existsSync(agentsMd(d)))
+    withTmp((d2) => {
+      cli(['add', 'core', '--target', d2, '--dry-run'])
+      assert.ok(!fs.existsSync(agentsMd(d2)))
+    })
+  }))
+
+test('AGENTS.md: uninstall strips only the block and keeps user content', () =>
+  withTmp((d) => {
+    fs.writeFileSync(agentsMd(d), '# 팀 메모\n')
+    cli(['add', 'core', '--target', d])
+    cli(['uninstall', '--target', d])
+    assert.equal(readAgents(d), '# 팀 메모\n')
+  }))
+
+test('AGENTS.md: file we created is removed on uninstall', () =>
+  withTmp((d) => {
+    cli(['add', 'core', '--target', d])
+    cli(['uninstall', '--target', d])
+    assert.ok(!fs.existsSync(agentsMd(d)))
+  }))
+
+test('AGENTS.md: hand-edited block is preserved by update and uninstall; --force overwrites', () =>
+  withTmp((d) => {
+    cli(['add', 'core', '--target', d])
+    fs.writeFileSync(agentsMd(d), readAgents(d).replace('# 프론트엔드 규칙 (my-fe-harness)', '# 직접 고침'))
+    const { out } = cli(['update', '--target', d])
+    assert.match(out, /직접 수정해 보존/)
+    assert.match(readAgents(d), /# 직접 고침/)
+    cli(['add', 'core', '--target', d, '--force'])
+    assert.doesNotMatch(readAgents(d), /# 직접 고침/)
+  }))
+
+test('AGENTS.md: broken markers are left untouched', () =>
+  withTmp((d) => {
+    const broken = `# 메모\n${AGENTS_START}\n깨진 블록\n`
+    fs.writeFileSync(agentsMd(d), broken)
+    const { out } = cli(['add', 'core', '--target', d])
+    assert.equal(readAgents(d), broken)
+    assert.match(out, /마커가 깨져/)
+  }))
+
+test('AGENTS.md: status reports the block', () =>
+  withTmp((d) => {
+    cli(['add', 'core', '--target', d])
+    assert.match(cli(['status', '--target', d]).out, /AGENTS\.md\s+설치됨\(원본 그대로\) \(규칙 블록\)/)
+  }))
+
+test('--global skips Codex when ~/.codex is absent (no dir created)', () =>
+  withTmp((home) => {
+    const { out } = cli(['add', 'core', '--global'], { env: { ...process.env, HOME: home } })
+    assert.ok(!fs.existsSync(path.join(home, '.codex')))
+    assert.match(out, /Codex 홈.*없음/)
+  }))
+
+test('--global writes ~/.codex/AGENTS.md and keeps a pre-existing file on uninstall', () =>
+  withTmp((home) => {
+    const env = { ...process.env, HOME: home }
+    const file = path.join(home, '.codex/AGENTS.md')
+    fs.mkdirSync(path.dirname(file))
+    fs.writeFileSync(file, '')
+    cli(['add', 'core', '--global'], { env })
+    assert.equal(countStart(fs.readFileSync(file, 'utf8')), 1)
+    cli(['uninstall', '--global'], { env })
+    assert.equal(fs.readFileSync(file, 'utf8'), '', 'pre-existing file stays, only the block goes')
+  }))
+
+test('--global honors CODEX_HOME', () =>
+  withTmp((home) => {
+    const codexHome = path.join(home, 'custom-codex')
+    fs.mkdirSync(codexHome)
+    cli(['add', 'core', '--global'], { env: { ...process.env, HOME: home, CODEX_HOME: codexHome } })
+    assert.ok(fs.existsSync(path.join(codexHome, 'AGENTS.md')))
+    assert.ok(!fs.existsSync(path.join(home, '.codex')))
+  }))
+
+// 마커 밖은 그대로 복원된다. 예외: 개행 없이 끝난 파일은 마지막 줄 개행 하나가 붙는다(구분자를 기록하지 않으므로).
+test('AGENTS.md: add→uninstall restores user content (whitespace·CRLF kept)', () =>
+  withTmp((d) => {
+    for (const original of ['# 메모\n', '# 메모\n\n', 'a\r\nb\r\n', '# 메모', '# 메모\n\n\n  ']) {
+      fs.writeFileSync(agentsMd(d), original)
+      cli(['add', 'core', '--target', d])
+      cli(['uninstall', '--target', d])
+      const expected = original.endsWith('\n') ? original : `${original}\n`
+      assert.equal(readAgents(d), expected, JSON.stringify(original))
+    }
+  }))
+
+test('AGENTS.md: identical block re-adopted when the agents record is lost', () =>
+  withTmp((d) => {
+    cli(['add', 'core', '--target', d])
+    const mfPath = path.join(d, '.claude/.my-fe-harness-manifest.json')
+    const m = JSON.parse(fs.readFileSync(mfPath, 'utf8'))
+    delete m.agents
+    fs.writeFileSync(mfPath, JSON.stringify(m))
+    cli(['add', 'core', '--target', d])
+    assert.ok(readManifest(path.join(d, '.claude')).agents?.sha)
+  }))
+
+test('AGENTS.md: tampered manifest cannot pull files outside .claude/rules into the block', () =>
+  withTmp((d) => {
+    cli(['add', 'ts', '--target', d])
+    fs.writeFileSync(path.join(d, 'SECRET.md'), 'TOP-SECRET-CONTENT')
+    const mfPath = path.join(d, '.claude/.my-fe-harness-manifest.json')
+    const m = JSON.parse(fs.readFileSync(mfPath, 'utf8'))
+    m.rules['../../SECRET.md'] = 'x'
+    m.files['rules/../../SECRET.md'] = 'x'
+    fs.writeFileSync(mfPath, JSON.stringify(m))
+    cli(['update', '--target', d])
+    assert.doesNotMatch(readAgents(d), /TOP-SECRET-CONTENT/)
   }))

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { removeAgents } from './installAgents.mjs'
 import { GUARD_MARK } from './installHook.mjs'
 import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
@@ -15,8 +16,9 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
   const rules = removeTracked(manifest.rules, (file) => path.join(rulesDir, file), rulesDir, dryRun)
   const files = removeTracked(manifest.files, (rel) => path.join(claudeDir, rel), claudeDir, dryRun)
   const hook = manifest.hook ? removeHook(manifest.hook, base, claudeDir, dryRun) : null
+  const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
 
-  const tracked = rules.length + files.length + (manifest.hook ? 1 : 0)
+  const tracked = rules.length + files.length + (manifest.hook ? 1 : 0) + (manifest.agents ? 1 : 0)
   let manifestRemoved = false
   if (!dryRun && tracked > 0) {
     const mf = manifestPath(claudeDir)
@@ -27,7 +29,7 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
     pruneEmptyDir(path.join(claudeDir, 'rules'))
   }
 
-  return { rules, files, hook, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, agents, tracked, manifestRemoved, claudeDir }
 }
 
 function removeTracked(entries, resolve, baseDir, dryRun) {
