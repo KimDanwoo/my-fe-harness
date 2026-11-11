@@ -26,6 +26,14 @@
 
 ### Added
 
+- **Codex 등 다른 에이전트 지원 — `AGENTS.md` 규칙 블록** — `add`·`update`가 설치된 `.claude/rules/` 규칙을
+  `AGENTS.md`의 마커 블록(`<!-- my-fe-harness:start/end -->`)으로도 내보낸다. 프로젝트는 `<target>/AGENTS.md`,
+  `--global`은 Codex 홈(`CODEX_HOME` 또는 `~/.codex`)이 있을 때만 `~/.codex/AGENTS.md`. frontmatter `paths`는
+  `> 적용 대상:` 한 줄로 바꾼다. 블록 sha256을 매니페스트(`agents`)에 기록해 `status`가 상태를 보여주고,
+  `update`·`uninstall`은 직접 고친 블록을 보존한다. 블록 밖 사용자 내용은 그대로 두며, 마커가 깨졌거나 중복이면
+  손대지 않는다. 우리가 만든 파일만 비었을 때 삭제한다. `--no-agents`로 생략. 파일이 크거나 `AGENTS.override.md`가
+  있으면 경고한다.
+
 - **프로젝트 고유 컨벤션 감지** — `_stack.md` 스탬프가 "이 프로젝트가 실제로 쓰는 것"을 함께 기록한다:
   데이터/상태·폼/검증·스타일·테스트·API 라이브러리(`package.json`), `src/`(없으면 `app/`) 최상위 구조,
   import alias(`tsconfig`/`jsconfig`의 `paths`). 보편 규칙 팩으로는 표현할 수 없는, 코드베이스에서만

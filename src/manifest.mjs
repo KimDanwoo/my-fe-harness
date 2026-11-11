@@ -45,6 +45,7 @@ export function readManifest(claudeDir) {
       rules: plainObject(data.rules),
       files: plainObject(data.files),
       hook: data.hook ?? null,
+      agents: agentsRecord(data.agents),
     }
   } catch {
     throw new Error(`${file} 파싱 실패 — 손상된 매니페스트. 수동 확인 후 다시 시도하세요.`)
@@ -57,7 +58,13 @@ export function writeManifest(claudeDir, manifest) {
 }
 
 function emptyManifest() {
-  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null }
+  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null, agents: null }
+}
+
+// AGENTS.md 블록 소유 기록. 형식이 어긋나면 기록 없음으로 취급(블록을 우리 것으로 오인하지 않는다).
+function agentsRecord(value) {
+  if (!value || typeof value.sha !== 'string') return null
+  return { file: typeof value.file === 'string' ? value.file : null, sha: value.sha, created: value.created === true }
 }
 
 // 변조된 매니페스트가 배열·문자열을 넣어도 안전하게 빈 객체로 취급.
