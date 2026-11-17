@@ -19,6 +19,7 @@ async function main() {
       force: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       global: { type: 'boolean', short: 'g', default: false },
+      'no-agents': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -34,6 +35,7 @@ async function main() {
     force: values.force,
     dryRun: values['dry-run'],
     global: values.global,
+    agents: !values['no-agents'],
     targetDir: path.resolve(values.target),
   }
 

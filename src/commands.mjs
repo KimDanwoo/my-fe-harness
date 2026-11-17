@@ -5,6 +5,7 @@ import { PACKS, rulePacks, resolvePacks, withSafety } from './packs.mjs'
 import { STRUCTURES, resolveStructure } from './structures.mjs'
 import { installRules, rulesBase, ruleSourcePath } from './installRules.mjs'
 import { installHook } from './installHook.mjs'
+import { installAgents, agentsStatus } from './installAgents.mjs'
 import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
 import { checkStructure } from './check.mjs'
@@ -132,7 +133,29 @@ function install(packs, options) {
       const fw = stamp.stack.frameworks.length > 0 ? stamp.stack.frameworks.join(', ') : '없음'
       console.log(`\n  스택 스탬프 기록 → .claude/rules/_stack.md  (감지: ${fw})`)
     }
+
+    syncAgents(options, manifest)
   })
+}
+
+// 설치된 규칙을 AGENTS.md 블록으로도 내보낸다(Codex 등). --no-agents면 건너뛴다.
+function syncAgents(options, manifest) {
+  if (!options.agents) return
+  const { file, status, bytes, isLarge, hasOverride } = installAgents(options, manifest)
+  console.log(`\n  ${agentsIcon(status)} ${displayPath(file, options) ?? 'Codex AGENTS.md'}  ${agentsLabel(status)}`)
+  if (isLarge) {
+    console.log(`    ⚠ AGENTS.md가 ${Math.round(bytes / 1024)}KB입니다 — 도구별 크기 상한을 넘으면 뒷부분이 잘릴 수 있습니다. 옵션 팩을 줄이는 걸 고려하세요.`)
+  }
+  if (hasOverride) {
+    console.log('    ⚠ 같은 위치에 AGENTS.override.md가 있습니다 — Codex는 그 파일을 우선 읽어 이 블록이 무시될 수 있습니다.')
+  }
+}
+
+function displayPath(file, options) {
+  if (!file) return null
+  if (!options.global) return path.relative(options.targetDir, file)
+  const home = os.homedir()
+  return file.startsWith(`${home}${path.sep}`) ? `~/${path.relative(home, file)}` : file
 }
 
 export function runUninstall(options) {
@@ -152,6 +175,11 @@ export function runUninstall(options) {
     console.log(`  ${uninstallIcon(result.hook.scriptStatus)} ${'safety-guard.mjs'.padEnd(20)} ${uninstallLabel(result.hook.scriptStatus)}`)
     console.log(`  ${'settings.json PreToolUse:'.padEnd(22)} ${uninstallLabel(result.hook.settingsStatus)}`)
   }
+  if (result.agents) {
+    const name = displayPath(result.agents.file, options) ?? 'Codex AGENTS.md'
+    const status = result.agents.status === 'modified' ? 'kept-modified' : result.agents.status
+    console.log(`  ${uninstallIcon(status)} ${name.padEnd(20)} ${uninstallLabel(status)} (규칙 블록)`)
+  }
 
   const modified = [...result.rules, ...result.files].filter((r) => r.status === 'kept-modified')
   if (modified.length > 0) {
@@ -169,7 +197,7 @@ export function runStatus(options) {
   ]
 
   console.log(`\n설치 상태${options.global ? ' [전역]' : ''} — ${path.join(claudeDir, 'rules')}\n`)
-  if (entries.length === 0 && !manifest.hook) {
+  if (entries.length === 0 && !manifest.hook && !manifest.agents) {
     console.log('  이 스코프에 my-fe-harness 설치 기록이 없습니다.')
     return
   }
@@ -188,6 +216,11 @@ export function runStatus(options) {
   if (manifest.hook) {
     const s = diskStatus(path.join(resolveClaudeDir(options), manifest.hook.rel.replace(/^\.claude\//, '')), manifest.hook.scriptSha)
     console.log(`  ${statusIcon(s)} ${'safety-guard.mjs'.padEnd(20)} ${statusLabel(s)}`)
+  }
+  const agents = agentsStatus(options, manifest)
+  if (agents) {
+    const name = displayPath(agents.file, options) ?? 'Codex AGENTS.md'
+    console.log(`  ${statusIcon(agents.status)} ${name.padEnd(20)} ${statusLabel(agents.status)} (규칙 블록)`)
   }
   const modified = entries.filter(({ file, sha, dir }) => diskStatus(path.join(dir, file), sha) === 'modified')
   if (modified.length > 0) console.log(`\n  ⚠ 수정된 파일 ${modified.length}개 — uninstall/update 시 보존됩니다.`)
@@ -254,6 +287,7 @@ export function runUpdate(options) {
 
     const stamp = writeStackStamp({ ...options, base: rulesBase(options) }, manifest)
     if (stamp) console.log('\n  스택 스탬프 갱신 → .claude/rules/_stack.md')
+    syncAgents(options, manifest)
     console.log('\n  수정한 규칙은 보존됩니다 — 최신 원본을 보려면 해당 파일에 --force로 add 하세요.')
   })
 }
@@ -280,7 +314,24 @@ function statusIcon(status) {
 }
 
 function statusLabel(status) {
-  return { intact: '설치됨(원본 그대로)', modified: '수정됨', missing: '없음(삭제됨)' }[status] ?? status
+  return { intact: '설치됨(원본 그대로)', modified: '수정됨', missing: '없음(삭제됨)', malformed: '마커 손상 — 수동 확인' }[status] ?? status
+}
+
+function agentsIcon(status) {
+  return { created: '✔', updated: '↻', 'up-to-date': '↷', 'kept-modified': '⚠', malformed: '✖' }[status] ?? '↷'
+}
+
+function agentsLabel(status) {
+  return {
+    created: '규칙 블록 추가 (Codex 등 AGENTS.md를 읽는 에이전트용)',
+    updated: '규칙 블록 갱신',
+    'up-to-date': '규칙 블록 이미 최신',
+    'kept-modified': '규칙 블록을 직접 수정해 보존 — 덮어쓰려면 --force',
+    malformed: '마커가 깨져 건너뜀 — 수동 확인',
+    'no-codex': '건너뜀 — Codex 홈(~/.codex 또는 CODEX_HOME)이 없음',
+    'dry-run': '규칙 블록 반영 예정  [dry-run]',
+    empty: '건너뜀 — 설치된 규칙 없음',
+  }[status] ?? status
 }
 
 function updateIcon(status) {
@@ -323,6 +374,7 @@ function uninstallLabel(status) {
     'outside-skipped': '건너뜀(경로 밖)',
     'not-present': '항목 없음',
     'parse-error': '설정 파싱 실패 — 수동 확인',
+    malformed: '마커 손상 — 수동 확인',
   }[status] ?? status
 }
 
@@ -359,8 +411,11 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
   --fsd                 --structure fsd 단축
   -t, --target <p>      대상 프로젝트 경로 (기본: 현재 폴더)
   -g, --global          ~/.claude 에 설치 (모든 프로젝트 적용, add·guard)
+                        Codex가 설치돼 있으면 ~/.codex/AGENTS.md 에도 규칙 블록 반영
+  --no-agents           AGENTS.md 규칙 블록을 만들지 않음 (Claude 전용)
   --force               기존 파일 덮어쓰기
   --dry-run             실제 쓰기 없이 수행 내용만 출력
 
 규칙은 <target>/.claude/rules/ 에 설치되며 Claude Code가 자동으로 로드한다.
+같은 규칙이 <target>/AGENTS.md 의 마커 블록에도 들어가 Codex 등 AGENTS.md를 읽는 에이전트가 읽는다.
 `

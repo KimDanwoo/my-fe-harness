@@ -46,6 +46,7 @@ npx github:KimDanwoo/my-fe-harness add core react
 
 → `safety`(+강제 훅)·`typescript`·`patterns`·`react`가 `.claude/rules/`에 깔리고,
 이후 Claude가 이 프로젝트에서 **자동으로 지킨다.** 접근성·폼·테스트 등은 필요할 때 `add`로 얹는다.
+같은 규칙이 `AGENTS.md`에도 들어가 **Codex 등 AGENTS.md를 읽는 에이전트도 지킨다**([Codex·다른 에이전트](#codex다른-에이전트--agentsmd)).
 
 ---
 
@@ -295,9 +296,11 @@ npx github:KimDanwoo/my-fe-harness guard --global      # 안전장치를 항상 
 npx github:KimDanwoo/my-fe-harness uninstall --dry-run
 ```
 
+`--global`은 Codex가 설치돼 있으면(`~/.codex` 또는 `CODEX_HOME`) `~/.codex/AGENTS.md`에도 규칙 블록을 넣는다.
+
 **옵션** — `--all` 규칙 팩 전체 · `--structure <id>` 구조 지정 · `--fsd` = `--structure fsd` ·
 `-t, --target <경로>` 대상 프로젝트 · `-g, --global` `~/.claude`에 설치 ·
-`--force` 덮어쓰기 · `--dry-run` 미리보기 · `-v, --version` · `-h, --help`
+`--no-agents` AGENTS.md 블록 생략(Claude 전용) · `--force` 덮어쓰기 · `--dry-run` 미리보기 · `-v, --version` · `-h, --help`
 
 CI 등 비-TTY 환경에서는 `init`/`scaffold`의 대화형 선택 대신 팩·구조를 인자로 지정한다
 (예: `add ts react --structure feature-based`). npm에 배포했다면 `npx my-fe-harness init`으로 바로 쓸 수 있다.
@@ -306,6 +309,7 @@ CI 등 비-TTY 환경에서는 `init`/`scaffold`의 대화형 선택 대신 팩�
 
 ```
 my-project/
+├── AGENTS.md                         # 마커 블록에 같은 규칙 — Codex 등이 읽음(블록 밖 내용은 보존)
 ├── .claude/
 │   ├── .my-fe-harness-manifest.json  # 설치본 sha256 기록 — 안전한 uninstall용
 │   └── rules/                        # 선택한 팩 — Claude Code가 자동 로드
@@ -321,6 +325,23 @@ my-project/
 - 구버전 Claude Code처럼 `.claude/rules/` 자동 로드가 없는 환경에서는
   CLAUDE.md에 `@.claude/rules/typescript.md` 형태로 import 한 줄을 추가하면 된다.
 - Next.js에서 `fsd`/`feature-based`를 쓰면 `pages`가 라우팅과 충돌하므로 `views`로 개명한다.
+
+## Codex·다른 에이전트 — AGENTS.md
+
+Codex는 `.claude/rules/`를 읽지 않고 `AGENTS.md`를 읽는다(전역 `~/.codex/AGENTS.md` → 프로젝트 루트부터 현재 폴더까지).
+그래서 `add`·`update`는 **설치된 `.claude/rules/` 규칙을 그대로** `AGENTS.md`의 마커 블록 하나로 내보낸다.
+
+| | Claude Code | Codex 등 |
+|---|---|---|
+| 프로젝트 | `.claude/rules/` | `<프로젝트>/AGENTS.md` |
+| 전역(`--global`) | `~/.claude/rules/` | `~/.codex/AGENTS.md` (Codex 홈이 있을 때만) |
+
+- **원본은 `.claude/rules/`** — 규칙을 고쳤으면 `update`로 블록에 반영한다. 블록을 직접 고치면 `update`·`uninstall`이 보존한다(덮어쓰기는 `--force`).
+- `<!-- my-fe-harness:start -->`~`end` 밖의 사용자 내용은 건드리지 않는다. 마커가 깨져 있으면 손대지 않고 알린다.
+- AGENTS.md에는 경로별 로드가 없어 블록 전체가 항상 읽힌다. 각 규칙의 `paths`는 `> 적용 대상:` 한 줄로 옮겨 적용 범위를 알려준다.
+- 크기: 권장 `core react` 블록은 약 11KB. 파일이 커지면 경고한다 — Codex는 합쳐진 지침에 크기 상한(`project_doc_max_bytes`)이 있다.
+- 같은 위치에 `AGENTS.override.md`가 있으면 Codex가 그 파일을 우선하므로 경고한다.
+- 강제 훅(`safety-guard`)은 Claude Code 전용이다. Codex에는 규칙(권고)만 적용된다.
 
 ## 생애주기 — 안전한 갱신·걷어내기
 
