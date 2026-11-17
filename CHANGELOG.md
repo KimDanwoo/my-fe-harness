@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
 ### Changed
 
 - **FSD: widgets 레이어 비권장 반영** — FSD 공식 문서가 widgets를 기본 레이어에서 뺐다
