@@ -26,6 +26,11 @@
 
 ### Added
 
+- **직접 호출 작업 스킬 3종** — 플러그인에 `state-machine-hunter`(암묵적 상태 머신 찾기)·`bug-triager`
+  (빈도×심각도 점수화, 곱이 5 미만이면 이슈로만 등록)·`ci-auditor`(`gh`로 최근 CI 실행을 대기·셋업·실행
+  단계로 분석, 코드 수정 없음)를 추가했다. 모두 `disable-model-invocation: true`라 자동으로 발동하지 않고
+  `/my-fe-harness:<이름>`으로 부를 때만 실행된다. 플러그인 전용이며 npx 설치·`AGENTS.md` 내보내기 대상은 아니다.
+
 - **Codex 등 다른 에이전트 지원 — `AGENTS.md` 규칙 블록** — `add`·`update`가 설치된 `.claude/rules/` 규칙을
   `AGENTS.md`의 마커 블록(`<!-- my-fe-harness:start/end -->`)으로도 내보낸다. 프로젝트는 `<target>/AGENTS.md`,
   `--global`은 Codex 홈(`CODEX_HOME` 또는 `~/.codex`)이 있을 때만 `~/.codex/AGENTS.md`. frontmatter `paths`는

@@ -82,6 +82,14 @@ test('slash commands reference the correct bin', () => {
     assert.ok(fs.readFileSync(r('commands', f), 'utf8').includes('my-fe-harness.mjs'), `${f} bad bin ref`)
 })
 
+test('every skill declares a name matching its directory and a description', () => {
+  for (const dir of fs.readdirSync(r('skills'))) {
+    const frontmatter = fs.readFileSync(r('skills', dir, 'SKILL.md'), 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? ''
+    assert.match(frontmatter, new RegExp(`^name: ${dir}$`, 'm'), `skills/${dir}: name must match directory`)
+    assert.match(frontmatter, /^description: \S/m, `skills/${dir}: missing description`)
+  }
+})
+
 test('only safety & commit are always-loaded; rest are path-scoped', () => {
   const ALWAYS = new Set(['safety.md', 'commit.md'])
   for (const p of PACKS) {

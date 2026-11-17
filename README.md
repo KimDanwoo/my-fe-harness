@@ -267,6 +267,14 @@ npx github:KimDanwoo/my-fe-harness check
 | `/my-fe-harness:guard` | (플러그인 없이 쓸 때) 강제 훅을 프로젝트에 설치 |
 | `/my-fe-harness:uninstall` | 설치한 규칙·훅을 안전하게 걷어냄(해시 검증, 수정본 보존) |
 
+직접 불러 쓰는 작업 스킬도 함께 들어 있다. 자동으로 발동하지 않고 이름을 입력할 때만 실행된다.
+
+| 스킬 | 하는 일 |
+|---|---|
+| `/my-fe-harness:state-machine-hunter` | 앱에 숨은 암묵적 상태 머신을 찾아 UX·DX·AX를 함께 개선할 결정을 내린다 |
+| `/my-fe-harness:bug-triager` | 버그를 빈도×심각도(각 1–10)로 점수화 — 곱이 5 미만이면 코드를 건드리지 않고 이슈로만 남긴다(등록 전 확인) |
+| `/my-fe-harness:ci-auditor [실행 횟수]` | `gh`로 최근 CI 실행(기본 150회)을 대기·셋업·실행 세 단계로 나눠 가장 느린 작업 5개를 보고한다(코드 수정 없음) |
+
 ## B. npx CLI (의존성 0)
 
 ```bash
@@ -379,7 +387,7 @@ my-fe-harness/
 ├── scripts/               # safety-guard.mjs — 강제 훅 스크립트(의존성 0)
 ├── hooks/hooks.json       # 플러그인 PreToolUse 훅 배선
 ├── commands/              # 플러그인 슬래시 커맨드
-├── skills/                # 플러그인 스킬 (컨벤션 자동 적용)
+├── skills/                # 플러그인 스킬 (컨벤션 자동 적용 + 직접 호출 작업 스킬)
 ├── test/                  # node:test 검증 스위트
 ├── .github/workflows/     # CI (Node 18/20/22)
 └── .claude-plugin/        # plugin.json + marketplace.json
