@@ -92,5 +92,5 @@ import { formatPrice } from '@/features/cart'
 
 - 변수/함수 camelCase · 타입 PascalCase · 상수 SCREAMING_SNAKE_CASE.
 - boolean은 `is/has/should`, 핸들러는 `handleXxx`/`onXxx`. 매직넘버는 상수로.
-- `type` 우선(선언 병합·확장이 필요할 때만 `interface`). 공개(export) 함수는 반환 타입 명시.
+- 객체 계약(props 등)은 `interface`(공유 축은 `extends`), 유니온·유틸리티 조합·별칭은 `type`. 공개(export) 함수는 반환 타입 명시.
 - 파라미터 3개 초과면 옵션 객체. boolean 플래그 파라미터 금지. 미사용 코드·조급한 추상화 금지(YAGNI).

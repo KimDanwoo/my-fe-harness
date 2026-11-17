@@ -21,7 +21,7 @@ description: 프론트엔드 컨벤션·안전장치 하네스. TypeScript·Reac
 ## 코어 요약 (항상 챙김)
 
 - **안전장치**: 비밀을 코드·번들·로그에 노출 금지(`NEXT_PUBLIC_`/`VITE_`=공개), 외부 입력 검증, `dangerouslySetInnerHTML`/`v-html` 금지, `target=_blank`엔 `rel=noopener`, env는 부팅 시 스키마 검증, 없는 패키지·API 지어내지 않기.
-- **TypeScript**: `type` 우선·`any` 금지(→`unknown` 좁히기), enum 대신 union 리터럴, 공개 경계 배럴(deep import 금지), import 순서 외부→절대→상대.
+- **TypeScript**: 객체 계약은 `interface`·조합은 `type`·`any` 금지(→`unknown` 좁히기), enum 대신 union 리터럴, 공개 경계 배럴(deep import 금지), import 순서 외부→절대→상대.
 - **좋은 패턴**: early return(중첩 3단계 금지), 선언형 체인, 조건에 이름, if/switch 대신 매핑, 흐름 설명 주석 금지, 매직넘버 상수화.
 - **React**: 함수 컴포넌트·`React.FC` 지양, 비동기는 React Query(useEffect 패칭 금지), 파생값은 렌더 중 계산, 전역은 최소.
 - **Vue 3**: `<script setup lang="ts">`, `ref`+`computed`(watch로 상태 복사 금지), 전역은 Pinia.

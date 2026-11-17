@@ -7,7 +7,7 @@ paths:
 
 > 적용 조건: **React 프로젝트에만.** Vue/기타 스택이면 이 규칙을 무시한다.
 
-함수 컴포넌트만, `React.FC` 지양. props 타입은 파일 안에서 `type Props`. 한 파일 = 한 공개 컴포넌트.
+함수 컴포넌트만, `React.FC` 지양. props는 파일 안에서 `interface XxxProps`. 한 파일 = 한 공개 컴포넌트.
 
 ## 서버 상태를 이펙트로 가져오지 않는다
 
