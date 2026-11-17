@@ -5,6 +5,31 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-17
+
+### Changed
+
+- **TypeScript·React: 객체 계약은 `interface`** — `type` 우선이던 기본값을 바꿨다. props 같은 객체 계약은
+  `interface`(공유 축은 `extends`), 유니온·유틸리티 조합·별칭은 `type`을 쓴다. TypeScript 핸드북의
+  권고("`type` 기능이 필요해질 때까지 `interface`")와 typescript-eslint `consistent-type-definitions`
+  기본값(`interface`)에 맞춘 것이다. `react.md`의 props 예시도 `interface XxxProps`로 고쳤다.
+  **기본 규칙이 바뀌므로**, `type` 우선을 유지하려면 설치된 `typescript.md`·`react.md`를 직접 고쳐 두면
+  `update`가 보존한다.
+- **FSD: widgets 문구 보강** — 신규로 만들지 않되 잘 쓰는 기존 프로젝트는 유지해도 된다는 공식 입장은
+  그대로 두고, 옮기기로 했을 때의 목적지(한 화면 전용 → page, 공용 동작+UI → features, 맥락 없는 UI →
+  shared, 앱 레이아웃 → app)를 적었다.
+- **patterns: 주석 규칙을 별도 절로** — "기본은 달지 않는다"를 ❌/✅ 예시와 함께 분리했다. 예외는
+  코드만 보면 틀려 보이는 우회·외부 제약 하나이고, 이때는 근거 링크를 함께 단다.
+
+### Added
+
+- **FSD: 공개 API·세그먼트·shared·Next.js 절** — 공식 문서의 Public API·Slices and segments·Next.js
+  가이드를 규칙으로 옮겼다. `index.ts`는 이름을 명시해 재수출(`export *` 금지), 슬라이스 안에서는
+  상대경로, 세그먼트 안 배럴 금지, 서버 전용 코드는 `index.server.ts`로 분리. 세그먼트 이름은
+  목적 기준(`ui`·`model`·`api`·`lib`·`config`)이고 `components`·`hooks`·`types` 같은 종류 기준 이름은
+  쓰지 않는다. `shared`는 슬라이스 없이 세그먼트만 두며 `shared/ui`·`shared/lib`는 항목마다 진입점을
+  둔다. Next.js와 폴더명이 겹치면 `_pages`·`_app`(공식 권장) 또는 `views`로 통일한다.
+
 ## [0.3.0] - 2026-11-17
 
 ### Changed
