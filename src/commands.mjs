@@ -5,6 +5,9 @@ import { PACKS, rulePacks, resolvePacks, withSafety } from './packs.mjs'
 import { STRUCTURES, resolveStructure } from './structures.mjs'
 import { installRules, rulesBase, ruleSourcePath } from './installRules.mjs'
 import { installHook } from './installHook.mjs'
+import { installLintHook } from './installLintHook.mjs'
+import { installVerifyGate } from './installVerifyGate.mjs'
+import { installVerifySkill } from './installVerifySkill.mjs'
 import { installAgents, agentsStatus } from './installAgents.mjs'
 import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
@@ -14,6 +17,13 @@ import { detectFrameworks } from './detect.mjs'
 import { hashFile, readManifest, writeManifest, resolveClaudeDir, manifestPath } from './manifest.mjs'
 import { PACKAGE_VERSION } from './version.mjs'
 import { promptPackSelection, promptStructureSelection } from './prompt.mjs'
+
+const NAME_WIDTH = 20
+const SETTINGS_NAME_WIDTH = 22
+const PACK_FILE_WIDTH = 17
+const PACK_ID_WIDTH = 14
+const VERIFY_FILE_WIDTH = 44
+const BYTES_PER_KB = 1024
 
 // 명령당 매니페스트를 한 번 읽어 넘기고, 끝에 한 번만 쓴다(read-modify-write 중복 제거).
 // 쓰기 시 현재 패키지 버전을 기록해 이후 status/update가 업그레이드 여부를 판단한다.
@@ -71,6 +81,65 @@ export function runGuard(options) {
   applyGuard(options)
 }
 
+export function runVerifyGate(options) {
+  const result = withManifest(options, (manifest) => installVerifyGate(options, manifest))
+  printHookInstall(options, result, {
+    title: '검증 게이트 설치',
+    hookAddedLabel: 'PreToolUse 훅 추가',
+  })
+  console.log('\n  → 커밋 전에 이 세션이 검증(verify 스킬·테스트·e2e)을 돌렸는지 보고, 변경을 판정하는 검사(lint 설정·잠금 테스트·훅)를 고치려면 승인을 받게 한다.')
+  console.log('    모드: MY_FE_HARNESS_VERIFY_GATE=observe(기본, 기록만 ~/.claude/my-fe-harness/verify-gate.log) | enforce | off')
+}
+
+export function runLintGuard(options) {
+  const result = withManifest(options, (manifest) => installLintHook(options, manifest))
+  printHookInstall(options, result, {
+    title: '린트 강제 훅 설치',
+    hookAddedLabel: 'PostToolUse·Stop 훅 추가',
+  })
+  if (options.global) printLintRuntimeStatus(options)
+  console.log('\n  → Claude가 고친 파일을 그 프로젝트의 ESLint로 바로 검사해 에러를 되돌려주고,')
+  console.log('    바뀐 파일에 에러가 남아 있으면 작업을 끝내지 못하게 한다(같은 세션 3번까지). 끄려면 MY_FE_HARNESS_LINT_GUARD=off.')
+}
+
+const GITIGNORE_LABELS = { created: '.gitignore 만들고 /.verify/ 추가', added: '.gitignore에 /.verify/ 추가', exists: '.gitignore에 이미 있음' }
+
+export function runVerifySkill(options) {
+  const result = withManifest(options, (manifest) => installVerifySkill(options, manifest))
+  const { project, files, gitignore, notes } = result
+  console.log(`\nverify 스킬 설치${dryRunTag(options)} — ${project.framework} · ${project.packageManager} · 경로 ${project.routes.list.length}개\n`)
+  for (const { rel, status } of files) console.log(`  ${status === 'kept' ? '↷' : '✔'} ${rel.padEnd(VERIFY_FILE_WIDTH)} ${label(status)}`)
+  console.log(`  ${gitignore === 'exists' ? '↷' : '✔'} ${GITIGNORE_LABELS[gitignore]}`)
+  if (files.some(({ status }) => status === 'kept')) console.log('\n  이미 있는 파일은 보존했습니다. 덮어쓰려면 --force')
+  console.log('\n  → 직접 해야 할 일(자동으로 고치지 않습니다):')
+  for (const note of notes) console.log(`    - ${note}`)
+}
+
+const RUNTIME_LABELS = { installed: '설치함', kept: '이미 최신', failed: '설치 실패 — npm 로그 확인', skipped: '건너뜀' }
+
+function printLintRuntimeStatus(options) {
+  const runtimeStatus = readManifest(resolveClaudeDir(options)).lintHook?.runtimeStatus
+  const runtimeLabel = RUNTIME_LABELS[runtimeStatus] ?? runtimeStatus
+  console.log(`  ${runtimeStatus === 'failed' ? '✖' : '✔'} ~/.claude/my-fe-harness-runtime  ESLint 런타임(ESLint 없는 프로젝트용) ${runtimeLabel}`)
+}
+
+const scopeTag = (options) => (options.global ? ' [전역]' : '')
+const dryRunTag = (options) => (options.dryRun ? '  [dry-run]' : '')
+
+function relativePathFormatter(options) {
+  const base = options.global ? os.homedir() : options.targetDir
+  return (target) => (options.global ? `~/${path.relative(base, target)}` : path.relative(base, target))
+}
+
+function printHookInstall(options, { scriptDest, settingsPath, scriptStatus, hookStatus }, { title, hookAddedLabel }) {
+  const rel = relativePathFormatter(options)
+  const isHookAdded = hookStatus === 'added'
+  const isScriptWritten = scriptStatus === 'created' || scriptStatus === 'overwritten'
+  console.log(`\n${title}${scopeTag(options)}${dryRunTag(options)}\n`)
+  console.log(`  ${isHookAdded ? '✔' : '↷'} ${rel(settingsPath)}  ${isHookAdded ? hookAddedLabel : '이미 설정됨'}`)
+  console.log(`  ${isScriptWritten ? '✔' : '↷'} ${rel(scriptDest)}  ${label(scriptStatus)}`)
+}
+
 export function printList() {
   console.log('\n규칙 팩:\n')
   for (const pack of rulePacks()) printPack(pack)
@@ -98,20 +167,16 @@ function applyStructure(structure, options) {
   const dest = path.join(options.targetDir, 'src/')
   console.log(`\n${structure.title} 스캐폴드 → ${dest}${options.dryRun ? '  [dry-run]' : ''}\n`)
   for (const { dir, status } of results) {
-    console.log(`  ${icon(status)} ${`src/${dir}/`.padEnd(17)} ${label(status)}`)
+    console.log(`  ${icon(status)} ${`src/${dir}/`.padEnd(PACK_FILE_WIDTH)} ${label(status)}`)
   }
 }
 
 function applyGuard(options) {
-  const { scriptDest, settingsPath, scriptStatus, hookStatus } = withManifest(options, (manifest) =>
-    installHook(options, manifest),
-  )
-  const base = options.global ? os.homedir() : options.targetDir
-  const rel = (p) => (options.global ? `~/${path.relative(base, p)}` : path.relative(base, p))
-  const dry = options.dryRun ? '  [dry-run]' : ''
-  console.log(`\n안전장치 훅(강제 계층) 설치${options.global ? ' [전역]' : ''}${dry}\n`)
-  console.log(`  ${hookStatus === 'added' ? '✔' : '↷'} ${rel(settingsPath)}  ${hookStatus === 'added' ? 'PreToolUse 훅 추가' : '이미 설정됨'}`)
-  console.log(`  ${scriptStatus === 'created' || scriptStatus === 'overwritten' ? '✔' : '↷'} ${rel(scriptDest)}  ${label(scriptStatus)}`)
+  const result = withManifest(options, (manifest) => installHook(options, manifest))
+  printHookInstall(options, result, {
+    title: '안전장치 훅(강제 계층) 설치',
+    hookAddedLabel: 'PreToolUse 훅 추가',
+  })
   console.log(`\n  → 하드코딩 비밀·비밀 파일 커밋·치명적 삭제를 도구 실행 전에 차단한다${options.global ? '(모든 프로젝트)' : ''}. 새 세션부터 적용.`)
 }
 
@@ -121,7 +186,7 @@ function install(packs, options) {
     const dest = path.join(rulesBase(options), '.claude/rules/')
     console.log(`\n규칙 설치${options.global ? ' [전역]' : ''} → ${dest}${options.dryRun ? '  [dry-run]' : ''}\n`)
     for (const { pack, status } of results) {
-      console.log(`  ${icon(status)} ${pack.file.padEnd(17)} ${label(status)}`)
+      console.log(`  ${icon(status)} ${pack.file.padEnd(PACK_FILE_WIDTH)} ${label(status)}`)
     }
     const skipped = results.filter((result) => result.status === 'skipped').length
     if (skipped > 0) {
@@ -144,7 +209,7 @@ function syncAgents(options, manifest) {
   const { file, status, bytes, isLarge, hasOverride } = installAgents(options, manifest)
   console.log(`\n  ${agentsIcon(status)} ${displayPath(file, options) ?? 'Codex AGENTS.md'}  ${agentsLabel(status)}`)
   if (isLarge) {
-    console.log(`    ⚠ AGENTS.md가 ${Math.round(bytes / 1024)}KB입니다 — 도구별 크기 상한을 넘으면 뒷부분이 잘릴 수 있습니다. 옵션 팩을 줄이는 걸 고려하세요.`)
+    console.log(`    ⚠ AGENTS.md가 ${Math.round(bytes / BYTES_PER_KB)}KB입니다 — 도구별 크기 상한을 넘으면 뒷부분이 잘릴 수 있습니다. 옵션 팩을 줄이는 걸 고려하세요.`)
   }
   if (hasOverride) {
     console.log('    ⚠ 같은 위치에 AGENTS.override.md가 있습니다 — Codex는 그 파일을 우선 읽어 이 블록이 무시될 수 있습니다.')
@@ -160,32 +225,44 @@ function displayPath(file, options) {
 
 export function runUninstall(options) {
   const result = uninstall(options)
-  const dry = options.dryRun ? '  [dry-run]' : ''
-  console.log(`\n걷어내기${options.global ? ' [전역]' : ''}${dry} — 우리가 쓴 그대로인 파일만 제거\n`)
+  console.log(`\n걷어내기${scopeTag(options)}${dryRunTag(options)} — 우리가 쓴 그대로인 파일만 제거\n`)
 
   if (result.tracked === 0) {
     console.log('  설치 매니페스트가 없습니다 — 제거할 항목이 없거나 이 도구로 설치하지 않았습니다.')
     return
   }
 
-  for (const { file, status } of [...result.rules, ...result.files]) {
-    console.log(`  ${uninstallIcon(status)} ${file.padEnd(20)} ${uninstallLabel(status)}`)
-  }
-  if (result.hook) {
-    console.log(`  ${uninstallIcon(result.hook.scriptStatus)} ${'safety-guard.mjs'.padEnd(20)} ${uninstallLabel(result.hook.scriptStatus)}`)
-    console.log(`  ${'settings.json PreToolUse:'.padEnd(22)} ${uninstallLabel(result.hook.settingsStatus)}`)
-  }
-  if (result.agents) {
-    const name = displayPath(result.agents.file, options) ?? 'Codex AGENTS.md'
-    const status = result.agents.status === 'modified' ? 'kept-modified' : result.agents.status
-    console.log(`  ${uninstallIcon(status)} ${name.padEnd(20)} ${uninstallLabel(status)} (규칙 블록)`)
-  }
+  const trackedFiles = [...result.rules, ...result.files]
+  for (const { file, status } of trackedFiles) console.log(uninstallRow(file, status, ''))
+  printUninstalledHooks(result, options)
 
-  const modified = [...result.rules, ...result.files].filter((r) => r.status === 'kept-modified')
+  const modified = trackedFiles.filter((r) => r.status === 'kept-modified')
   if (modified.length > 0) {
     console.log(`\n  ⚠ 수정된 파일 ${modified.length}개는 보존했습니다(직접 편집한 내용). 삭제하려면 수동으로 제거하세요.`)
   }
   if (result.manifestRemoved) console.log('\n  매니페스트 정리 완료.')
+}
+
+const uninstallRow = (name, status, suffix) =>
+  `  ${uninstallIcon(status)} ${name.padEnd(NAME_WIDTH)} ${uninstallLabel(status)}${suffix}`
+
+function printUninstalledSettingsHook(scriptName, settingsName, entry) {
+  console.log(uninstallRow(scriptName, entry.scriptStatus, ''))
+  console.log(`  ${settingsName.padEnd(SETTINGS_NAME_WIDTH)} ${uninstallLabel(entry.settingsStatus)}`)
+}
+
+function printUninstalledHooks(result, options) {
+  if (result.hook) printUninstalledSettingsHook('safety-guard.mjs', 'settings.json PreToolUse:', result.hook)
+  if (result.lintHook) printUninstalledSettingsHook('lint-guard.mjs', 'settings.json PostToolUse·Stop:', result.lintHook)
+  if (result.verifyGate) console.log(uninstallRow('verify-gate.mjs', result.verifyGate.scriptStatus, ''))
+  for (const { file, status } of result.verifySkill ?? []) console.log(uninstallRow(file, status, ''))
+  if (result.agents) printUninstalledAgents(result.agents, options)
+}
+
+function printUninstalledAgents(agents, options) {
+  const name = displayPath(agents.file, options) ?? 'Codex AGENTS.md'
+  const status = agents.status === 'modified' ? 'kept-modified' : agents.status
+  console.log(uninstallRow(name, status, ' (규칙 블록)'))
 }
 
 export function runStatus(options) {
@@ -196,32 +273,52 @@ export function runStatus(options) {
     ...Object.entries(manifest.files).map(([file, sha]) => ({ file, sha, dir: claudeDir })),
   ]
 
-  console.log(`\n설치 상태${options.global ? ' [전역]' : ''} — ${path.join(claudeDir, 'rules')}\n`)
-  if (entries.length === 0 && !manifest.hook && !manifest.agents) {
+  console.log(`\n설치 상태${scopeTag(options)} — ${path.join(claudeDir, 'rules')}\n`)
+  if (!hasInstallRecord(entries, manifest)) {
     console.log('  이 스코프에 my-fe-harness 설치 기록이 없습니다.')
     return
   }
 
+  printStatusVersion(manifest)
+  for (const { file, sha, dir } of entries) printStatusRow(file, diskStatus(path.join(dir, file), sha), '')
+  printStatusHooks(options, manifest)
+  printStatusAgents(options, manifest)
+  printStatusWarnings(options, manifest, entries)
+}
+
+function hasInstallRecord(entries, manifest) {
+  return entries.length > 0 || Boolean(manifest.hook || manifest.lintHook || manifest.verifyGate || manifest.verifySkill || manifest.agents)
+}
+
+function printStatusVersion(manifest) {
   const installedBy = manifest.installedBy ?? '알 수 없음(구버전 매니페스트)'
   console.log(`  설치 버전: ${installedBy}  ·  현재 패키지: ${PACKAGE_VERSION}`)
-  if (manifest.installedBy && manifest.installedBy !== PACKAGE_VERSION) {
-    console.log('  → 패키지가 갱신됨. update 로 안 건드린 규칙만 최신화할 수 있습니다.\n')
-  } else {
-    console.log('')
-  }
+  const isOutdated = manifest.installedBy && manifest.installedBy !== PACKAGE_VERSION
+  console.log(isOutdated ? '  → 패키지가 갱신됨. update 로 안 건드린 규칙만 최신화할 수 있습니다.\n' : '')
+}
 
-  for (const { file, sha, dir } of entries) {
-    console.log(`  ${statusIcon(diskStatus(path.join(dir, file), sha))} ${file.padEnd(20)} ${statusLabel(diskStatus(path.join(dir, file), sha))}`)
-  }
-  if (manifest.hook) {
-    const s = diskStatus(path.join(resolveClaudeDir(options), manifest.hook.rel.replace(/^\.claude\//, '')), manifest.hook.scriptSha)
-    console.log(`  ${statusIcon(s)} ${'safety-guard.mjs'.padEnd(20)} ${statusLabel(s)}`)
-  }
+function printStatusRow(name, status, suffix) {
+  console.log(`  ${statusIcon(status)} ${name.padEnd(NAME_WIDTH)} ${statusLabel(status)}${suffix}`)
+}
+
+function hookDiskStatus(options, hook) {
+  return diskStatus(path.join(resolveClaudeDir(options), hook.rel.replace(/^\.claude\//, '')), hook.scriptSha)
+}
+
+function printStatusHooks(options, manifest) {
+  if (manifest.hook) printStatusRow('safety-guard.mjs', hookDiskStatus(options, manifest.hook), '')
+  if (manifest.lintHook) printStatusRow('lint-guard.mjs', hookDiskStatus(options, manifest.lintHook), '')
+  for (const [rel, sha] of Object.entries(manifest.verifySkill?.files ?? {})) printStatusRow(rel, diskStatus(path.join(options.targetDir, rel), sha), '')
+}
+
+function printStatusAgents(options, manifest) {
   const agents = agentsStatus(options, manifest)
-  if (agents) {
-    const name = displayPath(agents.file, options) ?? 'Codex AGENTS.md'
-    console.log(`  ${statusIcon(agents.status)} ${name.padEnd(20)} ${statusLabel(agents.status)} (규칙 블록)`)
-  }
+  if (!agents) return
+  const name = displayPath(agents.file, options) ?? 'Codex AGENTS.md'
+  printStatusRow(name, agents.status, ' (규칙 블록)')
+}
+
+function printStatusWarnings(options, manifest, entries) {
   const modified = entries.filter(({ file, sha, dir }) => diskStatus(path.join(dir, file), sha) === 'modified')
   if (modified.length > 0) console.log(`\n  ⚠ 수정된 파일 ${modified.length}개 — uninstall/update 시 보존됩니다.`)
 
@@ -282,7 +379,7 @@ export function runUpdate(options) {
       const outcome = updateOne({ dest, src, recorded, dryRun: options.dryRun })
       if (outcome.status === 'updated' && !options.dryRun) manifest.rules[file] = outcome.newSha
       if (outcome.status === 'missing') delete manifest.rules[file]
-      console.log(`  ${updateIcon(outcome.status)} ${file.padEnd(20)} ${updateLabel(outcome.status)}`)
+      console.log(`  ${updateIcon(outcome.status)} ${file.padEnd(NAME_WIDTH)} ${updateLabel(outcome.status)}`)
     }
 
     const stamp = writeStackStamp({ ...options, base: rulesBase(options) }, manifest)
@@ -350,7 +447,7 @@ function updateLabel(status) {
 
 function printPack(pack) {
   const aliases = pack.aliases.length > 0 ? ` (별칭: ${pack.aliases.join(', ')})` : ''
-  console.log(`  ${pack.id.padEnd(14)} ${pack.title}${aliases}`)
+  console.log(`  ${pack.id.padEnd(PACK_ID_WIDTH)} ${pack.title}${aliases}`)
   console.log(`                 ${pack.description}\n`)
 }
 
@@ -393,6 +490,13 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
                         구조: ${STRUCTURES.map((s) => s.id).join(' | ')}
   guard                 안전장치 강제 훅 설치 (.claude/settings.json + hooks/)
                         비밀 하드코딩·비밀 파일 커밋·치명적 삭제를 실행 전 차단
+  verify-gate           검증 게이트 설치 (커밋 전 검증 여부·검사 파일 보호, 기본 관찰 모드)
+  verify-skill          대상 프로젝트에 verify 스킬(.claude/skills/verify)과 화면 비교 스크립트(scripts/verify/)를 깜
+                        package.json에서 검사·빌드·e2e 명령과 Next/Astro 경로를 감지해 채움
+                        (기존 파일은 --force 없이는 보존, uninstall이 걷어냄, 프로젝트 전용)
+  lint-guard            린트 강제 훅 설치 (.claude/settings.json + hooks/)
+                        고친 파일을 프로젝트 ESLint로 바로 검사해 Claude에게 되돌리고,
+                        바뀐 파일에 에러가 남으면 작업을 끝내지 못하게 함
   uninstall             설치한 규칙·훅 걷어내기 (별칭: unsync)
                         매니페스트 해시로 검증 — 우리가 쓴 그대로인 파일만 삭제,
                         직접 수정·생성한 파일은 보존

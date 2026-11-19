@@ -78,7 +78,7 @@ type Status = (typeof STATUSES)[number]
 ## 배럴 · import
 
 ```ts
-// ❌ 내부 구현에 직접 접근 (deep import)
+// ❌ 다른 모듈의 내부 구현에 직접 접근 (deep import)
 import { formatPrice } from '@/features/cart/lib/format/price'
 
 // ✅ 공개 API(배럴)로만
@@ -86,7 +86,7 @@ import { formatPrice } from '@/features/cart'
 ```
 
 - 공개 경계마다 `index.ts`, 외부는 배럴로만. `export *`·기계적 배럴 금지.
-- import 순서: 외부 → 절대경로 → 상대경로. **순환 의존 금지.**
+- import 순서: 외부 → 내부 별칭(절대경로). **상대경로(`./`·`../`) 금지** — 같은 폴더 파일도 별칭 전체 경로로. **순환 의존 금지.**
 
 ## 네이밍 · 시그니처
 

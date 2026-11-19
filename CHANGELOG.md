@@ -5,6 +5,59 @@
 
 ## [Unreleased]
 
+### Added
+
+- **컴포넌트 본문 규칙(ESLint 플러그인 `harness`)** — `scripts/lint-guard-plugin.mjs`(의존성 0)가 `harness/component-body`(컴포넌트 본문 최상위에는
+  `handleXxx`·`onXxx`만 함수로, 중첩 컴포넌트 금지)와 `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지, `error.tsx`·`global-error.tsx` 허용)를 제공한다.
+  기본 잠금이 `*.tsx`·`*.jsx`에 error로 켠다(테스트 파일 제외). 프로젝트 설정 아래 덧씌움·런타임 설정 모두에서 동작하고, `lint-guard` 설치가
+  플러그인 파일을 `.claude/hooks/`와 런타임 폴더에 복사해 manifest companions에 기록한다(uninstall이 지움).
+- **verify 스킬 틀 `verify-skill`** — 대상 프로젝트에 `.claude/skills/verify/SKILL.md`와 `scripts/verify/`(기준 커밋 대비 화면 비교)를 깐다.
+  package.json에서 빠른 검사·빌드·e2e 명령과 패키지 매니저를, Next App Router·Astro 페이지에서 경로 목록을 감지하고(못 찾으면 `['/']`),
+  서버는 `next start`·`astro preview`·`preview` 스크립트로 띄운다. 기존 파일은 `--force` 없이는 보존, `.gitignore`에 `/.verify/` 추가,
+  `@playwright/test` 설치와 tsconfig·vitest·ESLint 제외는 안내만 한다. `uninstall`·`status`가 다룬다.
+
+- **검증 게이트 `verify-gate`** — 커밋 전에 이 세션이 검증을 돌렸는지 보고(`Verified: none` 예외, 두 번 막히면 통과),
+  변경을 판정하는 검사 파일(lint 설정·잠금 테스트·훅·settings)을 고치려면 승인을 받게 한다. 기본은 관찰 모드(기록만).
+
+- **lint-guard 런타임** — `lint-guard --global`이 `~/.claude/my-fe-harness-runtime`에 eslint 10.15·typescript-eslint 8.73·
+  typescript 6.0.3을 설치한다. ESLint가 없는 프로젝트에서도 하네스 기본 잠금을 그 런타임으로 검사한다(.js·.ts·.tsx 등).
+  `uninstall --global`이 런타임 폴더를 지운다.
+
+- **lint-guard 강화** — 고친 파일을 `eslint --fix`로 먼저 자동 수정하고 남은 에러만 되돌린다. 끝낼 때는 그 세션·그 에이전트가
+  고친 파일만 본다(다른 에이전트 작업 중인 파일로 막지 않음). 서브에이전트 종료(SubagentStop)도 같은 검사를 받는다.
+- **기본 잠금(바닥선) `lint-guard-baseline.mjs`** — 중첩 삼항·복잡도 10·중첩 깊이 3·함수 120줄·컴포넌트 파일 250줄·매직넘버·
+  인라인 끄기 금지를 ESLint 기본 규칙으로 정의해, 프로젝트 설정 "아래에" 깔고 검사한다. 프로젝트가 필요한 곳은 뒤에서 끌 수 있고,
+  덧씌움이 실패하면 프로젝트 설정만으로 검사한다.
+
+- **린트 강제 훅 `lint-guard`** — PostToolUse(Write·Edit·MultiEdit)에서 고친 파일을 프로젝트 ESLint로 검사해
+  에러를 Claude에게 되돌리고, Stop에서 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(세션당 3번까지, fail-open,
+  `MY_FE_HARNESS_LINT_GUARD=off`로 끔). 플러그인은 `hooks.json`으로 자동, npx는 `lint-guard` 명령으로 프로젝트별 설치.
+  `uninstall`·`status`도 이 훅을 다룬다.
+  전역 사본이 있으면 프로젝트·플러그인 사본은 양보한다(중복 검사 방지).
+
+### Fixed
+
+- **`--global` 훅 경로** — exec 형식(`args`)은 셸이 없어 `${HOME}`이 펼쳐지지 않는다. 전역 설치(`guard`·`lint-guard`)는
+  셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
+
+### Changed
+
+- **하네스 코드도 기본 잠금을 지킨다** — 복잡도 10 초과 함수·중첩 삼항·매직넘버 38건을 함수 분리·상수로 정리(동작 동일).
+
+- **FSD: Next.js 레이어 이름은 `_app`·`_pages`** — FSD 공식 Next.js 가이드대로 둘 다 밑줄 접두로 바꾸도록 했다(`views` 대안 제거).
+  `check`는 `_app`·`_pages` 폴더를 같은 레이어로 검사한다. 정적 자산은 쓰는 곳에(슬라이스 `assets/` 또는 `shared/assets/`),
+  전역 스타일은 `_app/styles/`에 두도록 적었다.
+
+- **patterns: 중첩 삼항 금지·컴포넌트 본문 규칙·잠금 절** — 셋 이상 갈래는 매핑 객체·early return·함수로. 컴포넌트
+  본문에는 훅 호출·파생값·이벤트 핸들러만 두고 계산은 `lib/`, 상태 로직은 훅, 상수는 `config/`로. 공용 UI가 있으면
+  직접 마크업으로 다시 만들지 않는다. 규칙은 lint·검사 스크립트로 강제하고 인라인 비활성화 주석은 쓰지 않는다.
+
+- **TypeScript·FSD: 상대경로 import 금지** — 슬라이스 안에서도 `./`·`../` 대신 별칭 전체 경로로 import한다
+  (`index.ts` 재수출 포함). 한 파일을 가리키는 import 문자열이 하나로 통일되고, 슬라이스 안에서 파일을 옮겨도
+  다른 import가 깨지지 않는다. 별칭으로 세그먼트까지 들어가는 건 같은 슬라이스 안에서만 허용하고, 경계는
+  `import-x/no-restricted-paths`(위치 기반)로 지키도록 적었다. **기본 규칙이 바뀌므로**, 상대경로를 유지하려면
+  설치된 `fsd.md`·`typescript.md`를 직접 고쳐 두면 `update`가 보존한다.
+
 ## [0.4.0] - 2026-11-17
 
 ### Changed

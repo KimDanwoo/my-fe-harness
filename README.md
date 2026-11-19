@@ -192,6 +192,64 @@ npx github:KimDanwoo/my-fe-harness guard
 > 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
 > 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
 
+### 검증 게이트 — 증거 없이 커밋하지 않게, 변경이 자기 검사를 고치지 못하게
+
+[Claude Code 팀의 검증 원칙](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/)을 PreToolUse 훅으로 옮겼다(`verify-gate.mjs`).
+
+| 대상 | 하는 일 |
+|---|---|
+| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과 |
+| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) |
+
+- 모드 `MY_FE_HARNESS_VERIFY_GATE`: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`.
+  새 게이트는 관찰 모드로 시작해 오탐을 확인한 뒤 강제로 바꾼다.
+
+```bash
+npx github:KimDanwoo/my-fe-harness verify-gate --global
+```
+
+### 린트 강제 훅 — 규칙 문서를 지키게 만드는 계층
+
+규칙 문서(중첩 삼항 금지, 컴포넌트 본문 규칙, 매직넘버 금지 등)는 권고라서, 막는 장치가 없으면 LLM이 그 자리에 박아 넣는다.
+`lint-guard.mjs`는 **그 프로젝트의 ESLint 설정**을 그대로 써서 Claude의 작업을 검사한다.
+
+| 이벤트 | 하는 일 |
+|---|---|
+| `PostToolUse` (Write·Edit·MultiEdit) | 방금 고친 파일만 ESLint로 검사해, 에러를 exit 2로 Claude에게 되돌린다 — 그 자리에서 고치게 한다 |
+| `Stop` | 이번 작업에서 바뀐 파일(`git diff HEAD` + 새 파일)에 에러가 남아 있으면 끝내지 못하게 한다. 같은 세션 3번까지만 막는다(무한 반복 방지) |
+
+- **fail-open** — `node_modules/.bin/eslint`가 없는 프로젝트, ESLint 설정 오류, 시간 초과는 전부 통과.
+- **잠금 자체는 프로젝트 ESLint에 있다** — 이 훅은 그 결과를 Claude에게 즉시 돌려주는 통로다. 어떤 규칙을 켤지는 프로젝트가 정한다.
+- 기존 lint 에러가 많은 프로젝트에서는 파일을 건드릴 때마다 그 파일의 에러를 같이 고치게 된다. 그래서 npx 설치는 프로젝트별 선택(opt-in)이다.
+- **어느 프로젝트에서든**: 프로젝트 ESLint가 있으면 그 설정 아래에 하네스 기본 잠금(`lint-guard-baseline.mjs` — 중첩 삼항·복잡도·깊이·
+  길이·매직넘버·인라인 끄기 금지·컴포넌트 본문 규칙)을 깔고, 없으면 `--global` 설치 때 받은 런타임(`~/.claude/my-fe-harness-runtime`)으로 기본 잠금만 검사한다.
+- **컴포넌트 본문 규칙**(`lint-guard-plugin.mjs`, 의존성 0인 ESLint 플러그인 `harness`) — `*.tsx`·`*.jsx`의 최상위 컴포넌트(memo·forwardRef 포함)에서
+  `harness/component-body`(본문 최상위에는 `handleXxx`·`onXxx` 핸들러만 함수로 둔다, 중첩 컴포넌트 금지)와
+  `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지 — `error.tsx`·`global-error.tsx`는 허용)를 error로 켠다.
+  `useCallback` 등 호출식에 담은 함수와 커스텀 훅은 허용하고, 테스트 파일은 끈다. 플러그인 파일은 기본 잠금과 함께 `.claude/hooks/`·런타임 폴더에 복사된다.
+- 고친 파일은 `eslint --fix`로 먼저 자동 수정하고, 끝낼 때는 그 세션·그 에이전트가 고친 파일만 본다. 서브에이전트 종료(SubagentStop)도 검사한다.
+- 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
+
+```bash
+# 프로젝트에 린트 강제 훅 설치(.claude/settings.json의 PostToolUse·Stop에 병합, idempotent)
+npx github:KimDanwoo/my-fe-harness lint-guard
+```
+
+### verify 스킬 틀 — `verify-skill`
+
+커밋·PR 전에 "실제로 앱을 띄워 증거로 확인"하는 절차(`verify` 스킬)와 기준 커밋 대비 화면 비교 스크립트를 대상 프로젝트에 깐다.
+
+```bash
+npx github:KimDanwoo/my-fe-harness verify-skill   # 프로젝트 루트에서(프로젝트 전용, --global 없음)
+```
+
+- 깔리는 파일: `.claude/skills/verify/SKILL.md`, `scripts/verify/{run.mjs, playwright.verify.config.ts, screens.ts, screens.verify.ts}`. 기존 파일은 `--force` 없이는 보존하고, `uninstall`이 우리가 쓴 그대로인 파일만 걷어낸다.
+- 프로젝트 맞춤: package.json scripts에서 빠른 검사(`verify`·`lint`·`typecheck`·`test`)·빌드·e2e(`e2e`·`test:e2e`) 명령을, 락 파일로 패키지 매니저(못 찾으면 pnpm)를 감지해 SKILL.md에 채운다.
+- 경로 목록 `screens.ts`: Next.js App Router는 `app/**/page.*`(없으면 `src/app`)에서 동적 세그먼트(`[..]`)·병렬 슬롯(`@..`)·비공개 폴더(`_..`) 없는 경로를,
+  Astro는 `src/pages/**/*.astro·.md·.mdx`에서 채운다. 못 찾으면 `['/']`와 채우라는 안내를 남긴다.
+- 서버 실행: Next는 `next start`, Astro는 `astro preview`, 그 외는 `preview` 스크립트(`pnpm preview`).
+- 자동으로 하지 않는 것: `@playwright/test` 설치(없으면 SKILL.md와 출력에 설치 명령 안내), tsconfig·vitest·ESLint 제외 설정(안내만). `.gitignore`에는 `/.verify/`를 추가한다.
+
 ---
 
 # 3. 되읽기 — `check`로 구조 부식 점검
@@ -332,7 +390,7 @@ my-project/
 - 기존 파일은 절대 덮어쓰지 않는다(`--force`를 명시했을 때만).
 - 구버전 Claude Code처럼 `.claude/rules/` 자동 로드가 없는 환경에서는
   CLAUDE.md에 `@.claude/rules/typescript.md` 형태로 import 한 줄을 추가하면 된다.
-- Next.js에서 `fsd`/`feature-based`를 쓰면 `pages`가 라우팅과 충돌하므로 `views`로 개명한다.
+- Next.js에서 `fsd`/`feature-based`를 쓰면 `app`·`pages`가 라우팅 폴더와 충돌하므로 둘 다 `_app`·`_pages`로 바꾼다(FSD 공식 Next.js 가이드). `check`는 `_` 접두 레이어 폴더를 같은 레이어로 본다.
 
 ## Codex·다른 에이전트 — AGENTS.md
 

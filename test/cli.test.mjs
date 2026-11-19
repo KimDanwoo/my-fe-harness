@@ -151,13 +151,36 @@ test('add --global writes to sandboxed ~/.claude/rules', () =>
     assert.deepEqual(rr, ['patterns.md', 'safety.md', 'typescript.md'])
   }))
 
-test('guard --global uses ${HOME} hook path in ~/.claude/settings.json', () =>
+// args(exec 형식)는 셸이 없어 $HOME이 펼쳐지지 않는다 — 전역은 셸 형식이어야 한다.
+// https://code.claude.com/docs/en/hooks ("Exec form ... There is no shell")
+test('guard --global writes a shell-form hook so $HOME expands', () =>
   withTmp((home) => {
     cli(['guard', '--global'], { env: { ...process.env, HOME: home } })
     const s = JSON.parse(fs.readFileSync(path.join(home, '.claude/settings.json'), 'utf8'))
-    const arg = s.hooks.PreToolUse[0].hooks[0].args[0]
-    assert.match(arg, /^\$\{HOME\}\/\.claude\/hooks\/safety-guard\.mjs$/)
+    const handler = s.hooks.PreToolUse[0].hooks[0]
+    assert.equal(handler.command, 'node "$HOME/.claude/hooks/safety-guard.mjs"')
+    assert.equal(handler.args, undefined)
     assert.ok(fs.existsSync(path.join(home, '.claude/hooks/safety-guard.mjs')))
+  }))
+
+test('guard --global does not duplicate an existing shell-form guard hook', () =>
+  withTmp((home) => {
+    const settingsPath = path.join(home, '.claude/settings.json')
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
+    const existing = { matcher: 'Write', hooks: [{ type: 'command', command: 'node "$HOME/.claude/hooks/safety-guard.mjs"' }] }
+    fs.writeFileSync(settingsPath, JSON.stringify({ hooks: { PreToolUse: [existing] } }))
+    cli(['guard', '--global'], { env: { ...process.env, HOME: home } })
+    const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    assert.equal(s.hooks.PreToolUse.length, 1)
+  }))
+
+test('lint-guard --global writes shell-form PostToolUse·Stop hooks', () =>
+  withTmp((home) => {
+    cli(['lint-guard', '--global'], { env: { ...process.env, HOME: home, MY_FE_HARNESS_SKIP_RUNTIME: '1' } })
+    const s = JSON.parse(fs.readFileSync(path.join(home, '.claude/settings.json'), 'utf8'))
+    for (const event of ['PostToolUse', 'Stop'])
+      assert.equal(s.hooks[event][0].hooks[0].command, 'node "$HOME/.claude/hooks/lint-guard.mjs"')
+    assert.ok(fs.existsSync(path.join(home, '.claude/hooks/lint-guard.mjs')))
   }))
 
 // ---- framework auto-detect ----
@@ -323,6 +346,17 @@ test('check: fsd 아래→위 import를 파일:줄로 잡고 종료 코드 1', (
     assert.equal(code, 1)
     assert.match(out, /entities\/user\/ui\/UserCard\.tsx:1/)
     assert.match(out, /아래→위 import/)
+  }))
+
+test('check: Next.js용 _pages·_app 폴더도 같은 레이어로 검사한다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, { 'features/auth/ui/LoginForm.tsx': "import { HomePage } from '@/_pages/home'\n", '_pages/home/index.ts': 'export const HomePage = 1\n' })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /아래→위 import — features 는 pages 를 참조할 수 없다/)
   }))
 
 test('check: 같은 레이어의 옆 슬라이스 직접 import를 잡는다', () =>

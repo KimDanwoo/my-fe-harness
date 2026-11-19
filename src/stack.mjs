@@ -71,7 +71,7 @@ function renderConventions({ libs, sourceDirs, aliases }) {
 
   const reuse = libs.length > 0 ? '같은 역할의 라이브러리를 새로 추가하지 말고 위에 이미 있는 것을 쓴다.' : ''
   const placement = sourceDirs ? ' 새 파일은 위 구조 안에 둔다 — 최상위에 새 디렉토리를 임의로 만들지 않는다.' : ''
-  const importPath = aliases.length > 0 ? ' 크로스 레이어 import는 상대경로 대신 위 alias를 쓴다.' : ''
+  const importPath = aliases.length > 0 ? ' import는 같은 슬라이스 안에서도 상대경로 대신 위 alias를 쓴다.' : ''
 
   return `
 ## 이 프로젝트가 실제로 쓰는 것

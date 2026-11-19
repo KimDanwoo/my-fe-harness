@@ -3,11 +3,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { removeAgents } from './installAgents.mjs'
 import { GUARD_MARK } from './installHook.mjs'
+import { handlerHasMark } from './installLintHook.mjs'
+import { removeVerifySkillDirs } from './installVerifySkill.mjs'
 import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
 // 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
 // 해시가 다르면(사용자 수정) 보존하고, 경로가 .claude 밖이면(변조된 매니페스트) 건너뛴다.
-export function uninstall({ targetDir, dryRun = false, global = false }) {
+export function uninstall({ targetDir, dryRun, global }) {
   const base = global ? os.homedir() : targetDir
   const claudeDir = path.join(base, '.claude')
   const manifest = readManifest(claudeDir)
@@ -16,20 +18,33 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
   const rules = removeTracked(manifest.rules, (file) => path.join(rulesDir, file), rulesDir, dryRun)
   const files = removeTracked(manifest.files, (rel) => path.join(claudeDir, rel), claudeDir, dryRun)
   const hook = manifest.hook ? removeHook(manifest.hook, base, claudeDir, dryRun) : null
+  const lintHook = manifest.lintHook ? removeHook(manifest.lintHook, base, claudeDir, dryRun) : null
+  const verifyGate = manifest.verifyGate ? removeHook(manifest.verifyGate, base, claudeDir, dryRun) : null
+  const verifySkill = manifest.verifySkill ? removeVerifySkill(manifest.verifySkill, base, dryRun) : null
   const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
 
-  const tracked = rules.length + files.length + (manifest.hook ? 1 : 0) + (manifest.agents ? 1 : 0)
-  let manifestRemoved = false
-  if (!dryRun && tracked > 0) {
-    const mf = manifestPath(claudeDir)
-    if (fs.existsSync(mf)) {
-      fs.unlinkSync(mf)
-      manifestRemoved = true
-    }
-    pruneEmptyDir(path.join(claudeDir, 'rules'))
-  }
+  const tracked = rules.length + files.length + countRecorded(manifest)
+  const manifestRemoved = !dryRun && tracked > 0 && removeManifest(claudeDir)
 
-  return { rules, files, hook, agents, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, lintHook, verifyGate, verifySkill, agents, tracked, manifestRemoved, claudeDir }
+}
+
+function countRecorded(manifest) {
+  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.verifySkill, manifest.agents].filter(Boolean).length
+}
+
+function removeVerifySkill(verifySkill, base, dryRun) {
+  const files = removeTracked(verifySkill.files, (rel) => path.join(base, rel), base, dryRun)
+  removeVerifySkillDirs(base, dryRun)
+  return files
+}
+
+function removeManifest(claudeDir) {
+  const mf = manifestPath(claudeDir)
+  const existed = fs.existsSync(mf)
+  if (existed) fs.unlinkSync(mf)
+  pruneEmptyDir(path.join(claudeDir, 'rules'))
+  return existed
 }
 
 function removeTracked(entries, resolve, baseDir, dryRun) {
@@ -47,22 +62,37 @@ function removeHook(hook, base, claudeDir, dryRun) {
   const scriptDest = path.join(base, hook.rel)
   const settingsPath = path.join(claudeDir, 'settings.json')
 
-  let scriptStatus = 'missing'
-  if (isInside(claudeDir, scriptDest) && fs.existsSync(scriptDest)) {
-    scriptStatus = hashFile(scriptDest) === hook.scriptSha ? 'removed' : 'kept-modified'
-    if (!dryRun && scriptStatus === 'removed') fs.unlinkSync(scriptDest)
-  } else if (!isInside(claudeDir, scriptDest)) {
-    scriptStatus = 'outside-skipped'
-  }
-
-  const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, dryRun)
+  const scriptStatus = removeScript(scriptDest, hook.scriptSha, claudeDir, dryRun)
+  for (const companion of hook.companions ?? []) removeCompanion(path.join(base, companion.rel), companion.sha, claudeDir, dryRun)
+  removeRuntime(hook, base, claudeDir, dryRun)
+  const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
   if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)
   return { scriptStatus, settingsStatus }
 }
 
-// PreToolUse에서 우리 가드 훅 그룹만 제거하고 나머지 설정은 보존한다.
-function stripHookEntry(settingsPath, mark, dryRun) {
+function removeScript(scriptDest, recordedSha, claudeDir, dryRun) {
+  if (!isInside(claudeDir, scriptDest)) return 'outside-skipped'
+  if (!fs.existsSync(scriptDest)) return 'missing'
+  if (hashFile(scriptDest) !== recordedSha) return 'kept-modified'
+  if (!dryRun) fs.unlinkSync(scriptDest)
+  return 'removed'
+}
+
+function removeRuntime(hook, base, claudeDir, dryRun) {
+  if (!hook.runtime || dryRun) return
+  const runtimeDir = path.join(base, hook.runtime)
+  if (isInside(claudeDir, runtimeDir)) fs.rmSync(runtimeDir, { recursive: true, force: true })
+}
+
+// 훅이 함께 쓰는 파일(예: lint-guard의 기본 잠금)도 우리가 쓴 그대로일 때만 지운다.
+function removeCompanion(file, sha, claudeDir, dryRun) {
+  if (!isInside(claudeDir, file) || !fs.existsSync(file) || hashFile(file) !== sha) return
+  if (!dryRun) fs.unlinkSync(file)
+}
+
+// 지정한 이벤트들에서 우리 훅 그룹만 제거하고 나머지 설정은 보존한다.
+function stripHookEntry(settingsPath, mark, events, dryRun) {
   if (!fs.existsSync(settingsPath)) return 'missing'
   let settings
   try {
@@ -70,23 +100,22 @@ function stripHookEntry(settingsPath, mark, dryRun) {
   } catch {
     return 'parse-error'
   }
-  const groups = settings?.hooks?.PreToolUse
-  if (!Array.isArray(groups)) return 'not-present'
-
-  const kept = groups.filter(
-    (group) =>
-      !(group?.hooks ?? []).some((handler) =>
-        (handler?.args ?? []).some((arg) => typeof arg === 'string' && arg.includes(mark)),
-      ),
-  )
-  if (kept.length === groups.length) return 'not-present'
-
-  if (kept.length > 0) settings.hooks.PreToolUse = kept
-  else delete settings.hooks.PreToolUse
+  const removedFrom = events.filter((event) => stripEvent(settings, event, mark))
+  if (removedFrom.length === 0) return 'not-present'
   if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks
 
   if (!dryRun) writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   return 'removed'
+}
+
+function stripEvent(settings, event, mark) {
+  const groups = settings?.hooks?.[event]
+  if (!Array.isArray(groups)) return false
+  const kept = groups.filter((group) => !(group?.hooks ?? []).some((handler) => handlerHasMark(handler, mark)))
+  if (kept.length === groups.length) return false
+  if (kept.length > 0) settings.hooks[event] = kept
+  else delete settings.hooks[event]
+  return true
 }
 
 // 비어 있을 때만 디렉토리 제거(재귀 삭제 안 함).

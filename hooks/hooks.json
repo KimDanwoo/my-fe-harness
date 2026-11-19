@@ -1,5 +1,5 @@
 {
-  "description": "my-fe-harness 안전장치 강제 — 하드코딩 비밀·비밀 파일 커밋·치명적 삭제를 PreToolUse에서 차단(정상 흐름 무간섭, 오류 시 통과)",
+  "description": "my-fe-harness 강제 계층 — PreToolUse: 하드코딩 비밀·비밀 파일 커밋·치명적 삭제 차단 / PostToolUse·Stop: 고친 파일 ESLint 검사, 에러가 남으면 끝내지 못하게(정상 흐름 무간섭, 오류 시 통과)",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,8 +8,66 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/safety-guard.mjs"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/safety-guard.mjs"
+            ],
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/verify-gate.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/lint-guard.mjs"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/lint-guard.mjs"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/lint-guard.mjs"
+            ],
+            "timeout": 120
           }
         ]
       }

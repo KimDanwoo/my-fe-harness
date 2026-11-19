@@ -74,6 +74,31 @@ return <Badge />
 
 - 함수 1개 = 책임 1개 = 추상화 수준 1개.
 - 매직넘버는 상수로(`RETRY_DELAY_MS = 3_000`). 조급한 추상화 금지 — 세 번째 사용처에서 추출.
+- **중첩 삼항 금지.** 셋 이상 갈래는 매핑 객체·early return·작은 함수로.
+
+```ts
+// ❌ 중첩 삼항
+const issue = year < MIN ? yearMessage : month > MAX ? monthMessage : day ? dayMessage : undefined
+
+// ✅ 순서대로 검사하는 작은 함수 — 우선순위가 줄 순서로 읽힌다
+function dateIssue(parts: DateParts) {
+  if (isYearOutOfRange(parts.year)) return yearMessage
+  if (isMonthOutOfRange(parts.month)) return monthMessage
+  return dayMessage(parts)
+}
+```
+
+## 컴포넌트 본문 — 화면만 남긴다
+
+- 컴포넌트 본문에는 훅 호출, 간단한 파생값, `handleXxx`·`onXxx` 이벤트 핸들러만 둔다.
+- 계산·변환·검증은 `lib/` 순수 함수(테스트 가능), 상태·효과 로직은 `useXxx` 훅, 숫자·문구는 `config/` 상수로 뺀다.
+- 컴포넌트 안에 컴포넌트를 선언하지 않는다(렌더마다 새 타입이 되어 상태가 초기화된다) — 같은 `ui/`의 파일로.
+- 공용 UI(글자·폼·카드·버튼)가 있으면 직접 마크업·클래스 조합으로 다시 만들지 않는다. 같은 모양이 반복되면 공용 컴포넌트로 만든다.
+
+## 잠금 — 규칙은 기계가 지킨다
+
+- 문서로만 둔 규칙은 무너진다. 위 규칙은 ESLint(`no-nested-ternary`, `complexity`, `max-lines-per-function`, `no-magic-numbers`, `react/forbid-elements` 등)와 검사 스크립트로 강제한다.
+- 규칙 끄는 인라인 주석(`eslint-disable`)은 쓰지 않는다(`linterOptions.noInlineConfig`). 예외는 설정 파일 한 곳에 이유와 함께 둔다.
 
 ## 주석 — 기본은 달지 않는다
 
