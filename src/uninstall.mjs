@@ -59,6 +59,8 @@ function removeHook(hook, base, claudeDir, dryRun) {
   }
 
   for (const companion of hook.companions ?? []) removeCompanion(path.join(base, companion.rel), companion.sha, claudeDir, dryRun)
+  const runtimeDir = hook.runtime ? path.join(base, hook.runtime) : null
+  if (runtimeDir && isInside(claudeDir, runtimeDir) && !dryRun) fs.rmSync(runtimeDir, { recursive: true, force: true })
   const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
   if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)

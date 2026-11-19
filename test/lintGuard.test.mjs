@@ -172,3 +172,15 @@ test('기본 잠금: 중첩 삼항·복잡도·매직넘버 규칙과 인라인 
   const withTs = harnessBaseline([{ plugins: { '@typescript-eslint': {} } }])
   assert.ok(withTs.some((config) => config.rules?.['@typescript-eslint/no-magic-numbers']))
 })
+
+test('런타임: 프로젝트에 ESLint가 없으면 하네스 런타임으로 기본 잠금을 검사한다', () => {
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-guard-runtime-'))
+  fs.mkdirSync(path.join(runtime, 'node_modules', '.bin'), { recursive: true })
+  fs.writeFileSync(path.join(runtime, 'node_modules', '.bin', 'eslint'), FAKE_ESLINT, { mode: 0o755 })
+  fs.writeFileSync(path.join(runtime, 'eslint.config.mjs'), 'export default []\n')
+  const root = project({ withEslint: false })
+  fs.writeFileSync(path.join(root, 'package.json'), '{}')
+  const r = runGuard(edit(root, 'a.ts', 'BAD'), { MY_FE_HARNESS_RUNTIME_DIR: runtime })
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /src\/a\.ts:1:1/)
+})

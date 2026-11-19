@@ -11,6 +11,7 @@
 // - 같은 세션·에이전트에서 MAX_STOP_BLOCKS번까지만 막는다(무한 반복 방지).
 // - 하네스 기본 잠금(lint-guard-baseline.mjs)을 프로젝트 설정 "아래에" 깔아, 잠금 규칙이 없는 프로젝트에서도 지키게 한다.
 //   프로젝트 설정이 뒤에 오므로 프로젝트가 필요한 곳은 명시적으로 끌 수 있다. 덧씌움이 실패하면 프로젝트 설정만으로 검사한다.
+// - 프로젝트에 ESLint가 없으면 하네스 런타임(~/.claude/my-fe-harness-runtime)의 ESLint로 기본 잠금만 검사한다.
 // - 끄려면 MY_FE_HARNESS_LINT_GUARD=off. 전역(~/.claude/hooks) 사본이 있으면 프로젝트 사본은 아무것도 하지 않는다.
 // - 외부 의존성 0.
 
@@ -37,6 +38,9 @@ const OVERLAY_DIR = path.join(LEDGER_ROOT, 'configs')
 const BASELINE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'lint-guard-baseline.mjs')
 const PROJECT_CONFIG_NAMES = ['eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs']
 const ESLINT_CONFIG_ERROR = 2
+const RUNTIME_DIR = process.env.MY_FE_HARNESS_RUNTIME_DIR || path.join(os.homedir(), '.claude', 'my-fe-harness-runtime')
+const RUNTIME_CONFIG = path.join(RUNTIME_DIR, 'eslint.config.mjs')
+const PROJECT_MARKERS = ['package.json', '.git']
 
 try {
   run(JSON.parse(fs.readFileSync(0, 'utf8') || '{}'))
@@ -61,17 +65,17 @@ function guardEdit(input) {
   const file = input.tool_input?.file_path
   if (typeof file !== 'string' || !LINTABLE.test(file)) return
   const absolute = path.resolve(input.cwd ?? '.', file)
-  const root = findEslintRoot(path.dirname(absolute))
-  if (!root) return
+  const linter = linterFor(path.dirname(absolute))
+  if (!linter) return
   remember(input, absolute)
-  const report = lint(root, [absolute])
+  const report = lint(linter, [absolute])
   if (report) block(`방금 고친 파일에 자동으로 고칠 수 없는 lint 에러가 남았어요. 규칙을 끄지 말고 코드를 고치세요.\n${report}`)
 }
 
 function guardStop(input) {
   const ledger = ledgerDir(input)
-  const reports = groupByRoot(touchedFiles(ledger))
-    .map(([root, files]) => lint(root, files))
+  const reports = groupByLinter(touchedFiles(ledger))
+    .map(({ linter, files }) => lint(linter, files))
     .filter(Boolean)
   if (reports.length === 0) return fs.rmSync(ledger, { recursive: true, force: true })
   const count = readCount(path.join(ledger, BLOCKS_FILE)) + 1
@@ -102,13 +106,36 @@ function touchedFiles(ledger) {
     .filter((file) => fs.existsSync(file))
 }
 
-function groupByRoot(files) {
+function groupByLinter(files) {
   const groups = new Map()
   for (const file of files) {
-    const root = findEslintRoot(path.dirname(file))
-    if (root) groups.set(root, [...(groups.get(root) ?? []), file])
+    const linter = linterFor(path.dirname(file))
+    if (!linter) continue
+    const key = `${linter.bin}\0${linter.root}`
+    groups.set(key, { linter, files: [...(groups.get(key)?.files ?? []), file] })
   }
-  return [...groups.entries()]
+  return [...groups.values()]
+}
+
+// 검사 수단: 프로젝트 ESLint(기본 잠금 덧씌움 → 실패하면 프로젝트 설정만) 또는 하네스 런타임(기본 잠금만).
+function linterFor(dir) {
+  const projectRoot = findEslintRoot(dir)
+  if (projectRoot) {
+    const overlay = overlayConfig(projectRoot)
+    return { root: projectRoot, bin: eslintBin(projectRoot), configs: overlay ? [overlay, null] : [null] }
+  }
+  if (!fs.existsSync(eslintBin(RUNTIME_DIR)) || !fs.existsSync(RUNTIME_CONFIG)) return null
+  return { root: findProjectRoot(dir), bin: eslintBin(RUNTIME_DIR), configs: [RUNTIME_CONFIG] }
+}
+
+function findProjectRoot(start) {
+  let dir = path.resolve(start)
+  while (true) {
+    if (PROJECT_MARKERS.some((marker) => fs.existsSync(path.join(dir, marker)))) return dir
+    const parent = path.dirname(dir)
+    if (parent === dir) return path.resolve(start)
+    dir = parent
+  }
 }
 
 // 위로 올라가며 node_modules/.bin/eslint가 있는 폴더를 찾는다.
@@ -127,12 +154,11 @@ function eslintBin(root) {
 }
 
 // 자동으로 고칠 수 있는 것(포맷·import 순서 등)은 고치고, 남은 에러가 있으면 목록을, 없거나 검사할 수 없으면 null을 돌려준다.
-function lint(root, files) {
+function lint(linter, files) {
   if (files.length === 0) return null
-  const overlay = overlayConfig(root)
-  const withBaseline = overlay ? runEslint(root, files, ['--config', overlay]) : null
-  const result = withBaseline && withBaseline.status !== ESLINT_CONFIG_ERROR ? withBaseline : runEslint(root, files, [])
-  if (result.status !== ESLINT_LINT_ERRORS) return null
+  const result = firstLoadableRun(linter, files)
+  if (result?.status !== ESLINT_LINT_ERRORS) return null
+  const { root } = linter
   const errors = JSON.parse(result.stdout).flatMap((entry) =>
     entry.messages
       .filter((message) => message.severity === ERROR_SEVERITY)
@@ -143,9 +169,17 @@ function lint(root, files) {
   return [...errors.slice(0, MAX_REPORTED), ...(hidden > 0 ? [`…외 ${hidden}건`] : [])].join('\n')
 }
 
-function runEslint(root, files, extraArgs) {
-  return spawnSync(eslintBin(root), [...extraArgs, '--fix', '--format', 'json', '--no-warn-ignored', ...files], {
-    cwd: root,
+function firstLoadableRun(linter, files) {
+  for (const config of linter.configs) {
+    const result = runEslint(linter, files, config ? ['--config', config] : [])
+    if (result.status !== ESLINT_CONFIG_ERROR) return result
+  }
+  return null
+}
+
+function runEslint(linter, files, extraArgs) {
+  return spawnSync(linter.bin, [...extraArgs, '--fix', '--format', 'json', '--no-warn-ignored', ...files], {
+    cwd: linter.root,
     encoding: 'utf8',
     timeout: ESLINT_TIMEOUT_MS,
     maxBuffer: MAX_BUFFER,

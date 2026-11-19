@@ -82,6 +82,11 @@ export function runLintGuard(options) {
   console.log(`\n린트 강제 훅 설치${options.global ? ' [전역]' : ''}${dry}\n`)
   console.log(`  ${hookStatus === 'added' ? '✔' : '↷'} ${rel(settingsPath)}  ${hookStatus === 'added' ? 'PostToolUse·Stop 훅 추가' : '이미 설정됨'}`)
   console.log(`  ${scriptStatus === 'created' || scriptStatus === 'overwritten' ? '✔' : '↷'} ${rel(scriptDest)}  ${label(scriptStatus)}`)
+  if (options.global) {
+    const runtimeStatus = readManifest(resolveClaudeDir(options)).lintHook?.runtimeStatus
+    const runtimeLabel = { installed: '설치함', kept: '이미 최신', failed: '설치 실패 — npm 로그 확인', skipped: '건너뜀' }[runtimeStatus] ?? runtimeStatus
+    console.log(`  ${runtimeStatus === 'failed' ? '✖' : '✔'} ~/.claude/my-fe-harness-runtime  ESLint 런타임(ESLint 없는 프로젝트용) ${runtimeLabel}`)
+  }
   console.log('\n  → Claude가 고친 파일을 그 프로젝트의 ESLint로 바로 검사해 에러를 되돌려주고,')
   console.log('    바뀐 파일에 에러가 남아 있으면 작업을 끝내지 못하게 한다(같은 세션 3번까지). 끄려면 MY_FE_HARNESS_LINT_GUARD=off.')
 }

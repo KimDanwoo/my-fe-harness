@@ -176,7 +176,7 @@ test('guard --global does not duplicate an existing shell-form guard hook', () =
 
 test('lint-guard --global writes shell-form PostToolUse·Stop hooks', () =>
   withTmp((home) => {
-    cli(['lint-guard', '--global'], { env: { ...process.env, HOME: home } })
+    cli(['lint-guard', '--global'], { env: { ...process.env, HOME: home, MY_FE_HARNESS_SKIP_RUNTIME: '1' } })
     const s = JSON.parse(fs.readFileSync(path.join(home, '.claude/settings.json'), 'utf8'))
     for (const event of ['PostToolUse', 'Stop'])
       assert.equal(s.hooks[event][0].hooks[0].command, 'node "$HOME/.claude/hooks/lint-guard.mjs"')

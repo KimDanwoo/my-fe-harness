@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -12,6 +13,11 @@ export const LINT_GUARD_MARK = 'lint-guard.mjs'
 export const LINT_MATCHER = 'Write|Edit|MultiEdit'
 export const LINT_GUARD_EVENTS = ['PostToolUse', 'Stop', 'SubagentStop']
 const LINT_GUARD_TIMEOUT_SECONDS = 120
+const RUNTIME_CONFIG_SRC = fileURLToPath(new URL('../scripts/lint-guard-runtime.config.mjs', import.meta.url))
+export const RUNTIME_REL = '.claude/my-fe-harness-runtime'
+// ESLint가 없는 프로젝트용 런타임. typescript-eslint 8.73은 typescript <6.1을 지원한다.
+export const RUNTIME_PACKAGES = { eslint: '10.15.0', 'typescript-eslint': '8.73.0', typescript: '6.0.3' }
+const NPM_TIMEOUT_MS = 300_000
 
 // 린트 강제 훅을 설치한다. 스크립트를 .claude/hooks/에 복사하고 settings.json의 PostToolUse·Stop에 병합한다.
 // 고친 파일을 바로 검사하고(PostToolUse), 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(Stop).
@@ -36,13 +42,16 @@ export function installLintHook({ targetDir, force = false, dryRun = false, glob
       writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
     }
     const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(LINT_GUARD_SRC)
+    const runtimeStatus = global ? installRuntime(base, force) : 'project-scope'
     manifest.lintHook = {
       rel: LINT_GUARD_REL,
       scriptSha,
       mark: LINT_GUARD_MARK,
       events: LINT_GUARD_EVENTS,
       companions: [{ rel: BASELINE_REL, sha: hashFile(path.join(base, BASELINE_REL)) }],
+      ...(global ? { runtime: RUNTIME_REL } : {}),
     }
+    manifest.lintHook.runtimeStatus = runtimeStatus
   }
 
   return {
@@ -51,6 +60,26 @@ export function installLintHook({ targetDir, force = false, dryRun = false, glob
     scriptStatus: scriptExists ? (force ? 'overwritten' : 'kept') : 'created',
     hookStatus: missingEvents.length > 0 ? 'added' : 'exists',
   }
+}
+
+// 하네스 런타임: 프로젝트에 ESLint가 없을 때 기본 잠금을 검사할 eslint·typescript-eslint를 한 번 설치한다.
+function installRuntime(base, force) {
+  if (process.env.MY_FE_HARNESS_SKIP_RUNTIME === '1') return 'skipped'
+  const dir = path.join(base, RUNTIME_REL)
+  fs.mkdirSync(dir, { recursive: true })
+  const manifestFile = path.join(dir, 'package.json')
+  const pkg = `${JSON.stringify({ name: 'my-fe-harness-runtime', private: true, type: 'module', dependencies: RUNTIME_PACKAGES }, null, 2)}\n`
+  const isCurrent = fs.existsSync(manifestFile) && fs.readFileSync(manifestFile, 'utf8') === pkg
+  fs.writeFileSync(manifestFile, pkg)
+  fs.copyFileSync(RUNTIME_CONFIG_SRC, path.join(dir, 'eslint.config.mjs'))
+  fs.copyFileSync(BASELINE_SRC, path.join(dir, 'lint-guard-baseline.mjs'))
+  if (isCurrent && !force && fs.existsSync(path.join(dir, 'node_modules', '.bin', 'eslint'))) return 'kept'
+  const result = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
+    cwd: dir,
+    encoding: 'utf8',
+    timeout: NPM_TIMEOUT_MS,
+  })
+  return result.status === 0 ? 'installed' : 'failed'
 }
 
 function readJson(file) {

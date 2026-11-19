@@ -7,6 +7,10 @@
 
 ### Added
 
+- **lint-guard 런타임** — `lint-guard --global`이 `~/.claude/my-fe-harness-runtime`에 eslint 10.15·typescript-eslint 8.73·
+  typescript 6.0.3을 설치한다. ESLint가 없는 프로젝트에서도 하네스 기본 잠금을 그 런타임으로 검사한다(.js·.ts·.tsx 등).
+  `uninstall --global`이 런타임 폴더를 지운다.
+
 - **lint-guard 강화** — 고친 파일을 `eslint --fix`로 먼저 자동 수정하고 남은 에러만 되돌린다. 끝낼 때는 그 세션·그 에이전트가
   고친 파일만 본다(다른 에이전트 작업 중인 파일로 막지 않음). 서브에이전트 종료(SubagentStop)도 같은 검사를 받는다.
 - **기본 잠금(바닥선) `lint-guard-baseline.mjs`** — 중첩 삼항·복잡도 10·중첩 깊이 3·함수 120줄·컴포넌트 파일 250줄·매직넘버·
