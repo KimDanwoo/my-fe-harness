@@ -348,6 +348,17 @@ test('check: fsd 아래→위 import를 파일:줄로 잡고 종료 코드 1', (
     assert.match(out, /아래→위 import/)
   }))
 
+test('check: Next.js용 _pages·_app 폴더도 같은 레이어로 검사한다', () =>
+  withTmp((d) => {
+    cli(['scaffold', 'fsd', '--target', d])
+    withAlias(d)
+    writeSrc(d, { 'features/auth/ui/LoginForm.tsx': "import { HomePage } from '@/_pages/home'\n", '_pages/home/index.ts': 'export const HomePage = 1\n' })
+
+    const { code, out } = cli(['check', '--target', d])
+    assert.equal(code, 1)
+    assert.match(out, /아래→위 import — features 는 pages 를 참조할 수 없다/)
+  }))
+
 test('check: 같은 레이어의 옆 슬라이스 직접 import를 잡는다', () =>
   withTmp((d) => {
     cli(['scaffold', 'fsd', '--target', d])

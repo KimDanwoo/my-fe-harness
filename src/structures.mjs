@@ -11,8 +11,8 @@ export const STRUCTURES = [
     description: '중·대규모. 레이어 단방향: app→pages→features→entities→shared (widgets는 레거시)',
     sliceLayers: ['pages', 'widgets', 'features', 'entities'],
     dirs: [
-      { name: 'app', rank: 0, purpose: '진입점 — 프로바이더, 라우팅 설정, 전역 스타일', note: 'import 가능: pages 이하 전부' },
-      { name: 'pages', rank: 1, purpose: '라우트 단위 조립 (Next.js 사용 시 views로 개명 권장)', note: 'import 가능: features 이하 (widgets가 있으면 widgets 이하)' },
+      { name: 'app', rank: 0, purpose: '진입점 — 프로바이더, 라우팅 설정, 전역 스타일 (Next.js면 _app)', note: 'import 가능: pages 이하 전부' },
+      { name: 'pages', rank: 1, purpose: '라우트 단위 조립 (Next.js면 _pages)', note: 'import 가능: features 이하 (widgets가 있으면 widgets 이하)' },
       { name: 'widgets', rank: 2, scaffold: false, purpose: '레거시 — 공식 비권장(2026-07). 기존 프로젝트만 유지', note: 'import 가능: features 이하' },
       { name: 'features', rank: 3, scaffold: false, purpose: '사용자 행동 단위 (검색, 좋아요, 로그인)', note: 'import 가능: entities 이하' },
       { name: 'entities', rank: 4, scaffold: false, purpose: '도메인 모델 (user, product 등)', note: 'import 가능: shared만' },

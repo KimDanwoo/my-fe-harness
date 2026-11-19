@@ -106,12 +106,17 @@ entities/user/
 - `shared/ui`·`shared/lib`는 **항목마다 진입점**을 둔다: `shared/ui/button/index.ts` → `@/shared/ui/button`.
   전체를 묶는 큰 배럴(`shared/ui/index.ts`)은 만들지 않는다 — 하나만 써도 전부 딸려 온다.
 - `shared/api`·`shared/config`는 세그먼트에 `index.ts` 하나를 둔다.
+- **정적 자산(이미지·폰트)도 쓰는 곳에 둔다.** 한 슬라이스만 쓰면 그 슬라이스의 `assets/`, 여러 슬라이스가 쓰면 `shared/assets/`.
+  레이어 밖 `src/assets` 같은 공용 창고를 두지 않는다 — 어디서든 가져다 쓰게 되어 레이어 경계가 사라진다.
+  전역 스타일은 app 레이어의 `styles/`(FSD 공식 App 레이어 세그먼트).
 
 ## Next.js(App Router)와 함께 쓸 때
 
 - 라우팅 파일(`page.tsx`, `layout.tsx` 등)은 Next의 `app/`에만 두고, FSD page를 가져와 넘기는 얇은 파일로 유지한다.
-- FSD의 `pages`·`app` 폴더가 Next와 이름이 겹친다. 공식 권장은 `_pages`·`_app`이고, `views`로 바꿔도 된다.
-  프로젝트 안에서 한 가지로 통일하고 AGENTS.md(또는 CLAUDE.md)에 적는다.
+- FSD의 `pages`·`app` 레이어는 Next 폴더와 이름이 겹친다. **둘 다 `_pages`·`_app`으로 바꾼다**(FSD 공식 Next.js 가이드 —
+  "rename both `app` and `pages` FSD layers to `_app` and `_pages`, regardless of which router you use").
+  `views` 같은 다른 이름으로 바꾸지 않는다 — 한쪽만 공식을 따르면 레이어 이름 규칙이 둘이 된다.
+- 라우트 파일은 FSD page를 다시 내보내기만 한다: `export { ExamplePage as default, metadata } from '@/_pages/example'`.
 
 ## 안티패턴
 

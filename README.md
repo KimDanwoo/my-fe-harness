@@ -352,7 +352,7 @@ my-project/
 - 기존 파일은 절대 덮어쓰지 않는다(`--force`를 명시했을 때만).
 - 구버전 Claude Code처럼 `.claude/rules/` 자동 로드가 없는 환경에서는
   CLAUDE.md에 `@.claude/rules/typescript.md` 형태로 import 한 줄을 추가하면 된다.
-- Next.js에서 `fsd`/`feature-based`를 쓰면 `pages`가 라우팅과 충돌하므로 `views`로 개명한다.
+- Next.js에서 `fsd`/`feature-based`를 쓰면 `app`·`pages`가 라우팅 폴더와 충돌하므로 둘 다 `_app`·`_pages`로 바꾼다(FSD 공식 Next.js 가이드). `check`는 `_` 접두 레이어 폴더를 같은 레이어로 본다.
 
 ## Codex·다른 에이전트 — AGENTS.md
 

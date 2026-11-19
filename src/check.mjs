@@ -64,8 +64,11 @@ function locate(rel, srcDir) {
   const segments = rel.split('/')
   const isLayerRootFile = segments.length === 2 && !isDirectory(path.join(srcDir, rel))
   const slice = isLayerRootFile ? segments[1].split('.')[0] : segments[1]
-  return { rel, segments, layer: segments[0], slice }
+  return { rel, segments, layer: layerName(segments[0]), slice }
 }
+
+// Next.js와 충돌을 피한 이름(_app·_pages)도 같은 레이어로 본다(FSD 공식 Next.js 가이드).
+const layerName = (folder) => folder.replace(/^_/, '')
 
 const isDirectory = (abs) => fs.statSync(abs, { throwIfNoEntry: false })?.isDirectory() ?? false
 
