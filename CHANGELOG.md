@@ -7,6 +7,9 @@
 
 ### Added
 
+- **props 개수·덩어리 마크업 잠금** — 플러그인에 `harness/max-props`(컴포넌트 props 6개 이상 금지, 인라인 타입·같은 파일의 interface/type을 센다,
+  `extends`로 받은 기본 속성은 세지 않음)와 `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)을 추가하고 기본 잠금이 `*.tsx`·`*.jsx`에 켠다.
+  중간 컴포넌트가 상태를 props로 릴레이하거나 화면 하나에 마크업을 쌓는 대신 합성 컴포넌트(Root + 파트, children 조립)로 나누게 한다. 한도는 옵션으로 바꿀 수 있다.
 - **컴포넌트 본문 규칙(ESLint 플러그인 `harness`)** — `scripts/lint-guard-plugin.mjs`(의존성 0)가 `harness/component-body`(컴포넌트 본문 최상위에는
   `handleXxx`·`onXxx`만 함수로, 중첩 컴포넌트 금지)와 `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지, `error.tsx`·`global-error.tsx` 허용)를 제공한다.
   기본 잠금이 `*.tsx`·`*.jsx`에 error로 켠다(테스트 파일 제외). 프로젝트 설정 아래 덧씌움·런타임 설정 모두에서 동작하고, `lint-guard` 설치가

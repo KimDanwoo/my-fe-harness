@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const VERIFY_DIR = '.verify';
 const SCREENSHOT_TIMEOUT_MS = 30_000;
+const LONG_PAGE_TEST_TIMEOUT_MS = 180_000;
 
 export default defineConfig({
   testDir: '.',
@@ -9,6 +10,7 @@ export default defineConfig({
   outputDir: `../../${VERIFY_DIR}/results`,
   snapshotPathTemplate: `../../${VERIFY_DIR}/snapshots/{projectName}/{arg}{ext}`,
   fullyParallel: true,
+  timeout: LONG_PAGE_TEST_TIMEOUT_MS,
   retries: 0,
   reporter: [
     ['list'],
