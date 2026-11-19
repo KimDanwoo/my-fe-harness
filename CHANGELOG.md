@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **TypeScript·FSD: 상대경로 import 금지** — 슬라이스 안에서도 `./`·`../` 대신 별칭 전체 경로로 import한다
+  (`index.ts` 재수출 포함). 한 파일을 가리키는 import 문자열이 하나로 통일되고, 슬라이스 안에서 파일을 옮겨도
+  다른 import가 깨지지 않는다. 별칭으로 세그먼트까지 들어가는 건 같은 슬라이스 안에서만 허용하고, 경계는
+  `import-x/no-restricted-paths`(위치 기반)로 지키도록 적었다. **기본 규칙이 바뀌므로**, 상대경로를 유지하려면
+  설치된 `fsd.md`·`typescript.md`를 직접 고쳐 두면 `update`가 보존한다.
+
 ## [0.4.0] - 2026-11-17
 
 ### Changed

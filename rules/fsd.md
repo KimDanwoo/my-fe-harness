@@ -51,7 +51,8 @@ import { LoginForm } from '@/features/auth'
 // features/cart/model/store.ts
 import { toggleLike } from '@/features/like'
 
-// ❌ 슬라이스 내부로 deep import — 공개 API를 우회한다
+// ❌ 다른 슬라이스 내부로 deep import — 공개 API를 우회한다
+// pages/profile/ui/ProfilePage.tsx
 import { userStore } from '@/entities/user/model/store'
 
 // ✅ 공개 API로만 접근하고, 조합은 상위 레이어에서 한다
@@ -79,11 +80,17 @@ entities/user/
 - 바깥에서는 `@/entities/user`(서버 전용은 `@/entities/user/index.server`)로만 import한다.
 - `index.ts`는 **이름을 하나씩 명시해서** 재수출한다. `export *` 금지. 타입은 `export type`.
 - **바깥에서 실제로 쓰는 것만** 내보낸다. 안 쓰는 걸 미리 열어 두지 않는다.
-- 슬라이스 **안에서는 상대경로**로 import한다. 자기 `index.ts`를 경유하지 않는다 — 순환 의존이 된다.
+- **상대경로(`./`·`../`)를 쓰지 않는다.** 슬라이스 안에서도 별칭 전체 경로로 import한다
+  (`entities/user/ui/UserCard.tsx` → `@/entities/user/model/store`). `index.ts`의 재수출도 같다.
+  한 파일을 가리키는 import 문자열이 하나로 통일되고, 슬라이스 안에서 파일을 옮겨도 다른 import가 깨지지 않는다.
+- 별칭으로 세그먼트까지 들어가는 건 **같은 슬라이스 안에서만**이다. 슬라이스 밖에서는 공개 API로만.
+  자기 `index.ts`는 경유하지 않는다 — 순환 의존이 된다.
+- 강제는 ESLint로: `no-restricted-imports` 패턴 `^\.{1,2}/`로 상대경로를 막고, 경계는 문자열 패턴이 아니라
+  가져오는 쪽 위치를 아는 `import-x/no-restricted-paths`로 지킨다(문자열 패턴은 같은 슬라이스 안의 별칭 경로까지 막는다).
 - **세그먼트 안에 `index.ts`(배럴)를 두지 않는다**(`model/index.ts`, `model/hooks/index.ts` 등). 출입구는 루트 하나다.
 - 서버 전용 코드(`server-only`, `next/headers`, fs 등)는 `index.ts`에 섞지 않고 `index.server.ts`로 분리한다 —
   클라이언트 번들에 딸려 들어가는 걸 막는다.
-- 테스트는 같은 슬라이스 안에 두고 상대경로로 대상 파일을 직접 import해도 된다.
+- 테스트는 같은 슬라이스 안에 두고 별칭 경로로 대상 파일을 직접 import해도 된다.
 
 ## 세그먼트 — 목적으로 이름 짓는다
 
@@ -112,6 +119,7 @@ entities/user/
 - ❌ `entities/user/ui/LoginButton.tsx` — entity에 사용자 행동이 들어갔다. 한 화면용이면 그 page에, 공용이면 `features/auth`로.
 - ❌ 소비자가 하나뿐인 feature·entity — 그 소비자(page) 안으로 되돌린다.
 - ❌ `shared/world/`, `shared/model/` — shared에 도메인 폴더나 `model` 세그먼트. 쓰는 슬라이스로 옮기거나 `lib`·`config`로.
-- ❌ `@/entities/user/model/types` — 세그먼트까지 파고드는 import. 루트 `index.ts`로만.
+- ❌ 슬라이스 밖에서 `@/entities/user/model/types` — 세그먼트까지 파고드는 import. 바깥은 루트 `index.ts`로만(슬라이스 안에서는 이 경로가 정상).
+- ❌ `./`·`../` 상대경로 import — 슬라이스 안에서도 별칭 전체 경로로.
 - ❌ 신규 프로젝트에 `widgets/` 생성 — 화면 전용 조합은 pages, 공용 동작은 features, 맥락 없는 UI는 shared로.
 - ❌ 처음부터 모든 레이어 스캐폴드 — app·pages·shared부터. 빈 레이어는 만들지 않는다(YAGNI).
