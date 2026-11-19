@@ -227,6 +227,9 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
   `harness/component-body`(본문 최상위에는 `handleXxx`·`onXxx` 핸들러만 함수로 둔다, 중첩 컴포넌트 금지)와
   `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지 — `error.tsx`·`global-error.tsx`는 허용)를 error로 켠다.
   `useCallback` 등 호출식에 담은 함수와 커스텀 훅은 허용하고, 테스트 파일은 끈다. 플러그인 파일은 기본 잠금과 함께 `.claude/hooks/`·런타임 폴더에 복사된다.
+- **합성 컴포넌트 규칙**(같은 플러그인) — `harness/max-props`(props 6개 이상 금지, `extends`로 받은 기본 속성은 세지 않음)와
+  `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)를 error로 켠다. 상태를 props로 릴레이하거나 한 화면에 마크업을 쌓는 대신
+  Root가 상태를 context로 내려주고 파트가 구독하는 합성 컴포넌트, children 조립, 설정 배열 + map으로 나누게 한다.
 - 고친 파일은 `eslint --fix`로 먼저 자동 수정하고, 끝낼 때는 그 세션·그 에이전트가 고친 파일만 본다. 서브에이전트 종료(SubagentStop)도 검사한다.
 - 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
 

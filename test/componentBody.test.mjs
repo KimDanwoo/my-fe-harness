@@ -269,3 +269,44 @@ export function RowsView({ rows }) {
 test('ESLint 런타임: 커스텀 훅 결과를 자식 하나에만 넘기면 잡고, 여러 자식 공유·목록 행 전달은 허용한다', { skip: skipWithoutRuntime }, async () => {
   assert.deepEqual(await lintWithRuntime(HOOK_PASSTHROUGH_COMPONENT, 'src/ReportViews.tsx'), ['harness/no-store-passthrough'])
 })
+
+const PROPS_COMPONENTS = `import type { ComponentProps, ReactNode } from 'react'
+
+interface FiveProps { a: string; b: string; c: string; d: string; e: string }
+export function Five(props: FiveProps) { return <div>{props.a}</div> }
+
+type SixProps = { a: string; b: string; c: string; d: string; e: string; f: string }
+export function Six({ a }: SixProps) { return <div>{a}</div> }
+
+export const InlineSix = ({ a }: { a: 1; b: 1; c: 1; d: 1; e: 1; f: 1 }) => <div>{a}</div>
+
+interface ButtonProps extends ComponentProps<'button'> { variant?: string; children: ReactNode }
+export function Button({ variant, ...props }: ButtonProps) { return <button data-variant={variant} {...props} /> }
+`
+
+test('ESLint 런타임: props 6개 이상인 컴포넌트를 잡고, 5개·기본 속성 확장은 허용한다', { skip: skipWithoutRuntime }, async () => {
+  assert.deepEqual(await lintWithRuntime(PROPS_COMPONENTS, 'src/Props.tsx'), ['harness/max-props', 'harness/max-props'])
+})
+
+const nest = (depth) => (depth === 0 ? 'x' : `<div>${nest(depth - 1)}</div>`)
+const MARKUP_COMPONENTS = `export function Shallow() { return ${nest(5)} }
+export function Deep() { return ${nest(6)} }
+export function Flat() { return <>${'<span />'.repeat(15)}</> }
+export function Crowded() { return <>${'<span />'.repeat(16)}</> }
+export function Composed() {
+  return (
+    <Page.Root>
+      <Page.Header />
+      <Page.Body>
+        <Card>
+          <Card.Title />
+        </Card>
+      </Page.Body>
+    </Page.Root>
+  )
+}
+`
+
+test('ESLint 런타임: JSX 깊이 6 이상·HTML 요소 16개 이상을 한 컴포넌트에 쌓으면 잡는다', { skip: skipWithoutRuntime }, async () => {
+  assert.deepEqual(await lintWithRuntime(MARKUP_COMPONENTS, 'src/Markup.tsx'), ['harness/component-markup', 'harness/component-markup'])
+})

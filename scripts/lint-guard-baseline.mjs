@@ -15,6 +15,8 @@ const COMPONENT_BODY_RULES = {
   'harness/component-body': 'error',
   'harness/no-direct-effect': 'error',
   'harness/no-store-passthrough': 'error',
+  'harness/max-props': 'error',
+  'harness/component-markup': 'error',
 }
 const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']

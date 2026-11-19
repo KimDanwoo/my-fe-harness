@@ -212,10 +212,123 @@ const noStorePassthrough = {
   },
 }
 
+const MAX_PROPS = 5
+const MAX_JSX_DEPTH = 5
+const MAX_HOST_ELEMENTS = 15
+const HOST_TAG = /^[a-z]/
+
+const declarationOf = (statement) => (EXPORT_DECLARATIONS.has(statement.type) ? statement.declaration : statement)
+
+function componentNameOf(statement) {
+  const declaration = declarationOf(statement)
+  const id = declaration?.type === 'FunctionDeclaration' ? declaration.id : declaration?.declarations?.[0]?.id
+  return id?.name ?? 'default'
+}
+
+function componentsOf(program) {
+  return program.body.flatMap((statement) => componentFunctionsOf(statement).map((node) => ({ node, name: componentNameOf(statement) })))
+}
+
+function typeLiteralCount(declaration) {
+  if (declaration?.type === 'TSInterfaceDeclaration') return declaration.body.body.length
+  if (declaration?.type === 'TSTypeAliasDeclaration' && declaration.typeAnnotation.type === 'TSTypeLiteral') return declaration.typeAnnotation.members.length
+  return null
+}
+
+export function propsTypeCounts(program) {
+  const counts = new Map()
+  for (const statement of program.body) {
+    const declaration = declarationOf(statement)
+    const count = typeLiteralCount(declaration)
+    if (count !== null) counts.set(declaration.id.name, count)
+  }
+  return counts
+}
+
+export function propsCountOf(component, counts) {
+  const type = component.params[0]?.typeAnnotation?.typeAnnotation
+  if (type?.type === 'TSTypeLiteral') return type.members.length
+  if (type?.type === 'TSTypeReference' && type.typeName.type === 'Identifier') return counts.get(type.typeName.name) ?? null
+  return null
+}
+
+const maxProps = {
+  meta: {
+    type: 'suggestion',
+    schema: [{ type: 'object', properties: { max: { type: 'integer' } }, additionalProperties: false }],
+    messages: {
+      tooManyProps:
+        '{{name}}: props {{count}}개(최대 {{max}}). 합성 컴포넌트로 나눈다 — Root가 상태를 context로 내려주고 파트가 구독하거나, 내용은 children으로 조립한다.',
+    },
+  },
+  create(context) {
+    const max = context.options[0]?.max ?? MAX_PROPS
+    return {
+      Program(program) {
+        const counts = propsTypeCounts(program)
+        for (const { node, name } of componentsOf(program)) {
+          const count = propsCountOf(node, counts)
+          if (count !== null && count > max) context.report({ node, messageId: 'tooManyProps', data: { name, count, max } })
+        }
+      },
+    }
+  },
+}
+
+const isHostElement = (node) => node.openingElement.name.type === 'JSXIdentifier' && HOST_TAG.test(node.openingElement.name.name)
+const childrenOf = (node) => Object.entries(node).flatMap(([key, value]) => (key === 'parent' ? [] : childNodesOf(value)))
+
+export function markupOf(root) {
+  const markup = { depth: 0, hostElements: 0 }
+  const visit = (node, depth) => {
+    const isElement = node.type === 'JSXElement'
+    const nextDepth = isElement ? depth + 1 : depth
+    if (isElement) {
+      markup.depth = Math.max(markup.depth, nextDepth)
+      if (isHostElement(node)) markup.hostElements += 1
+    }
+    for (const child of childrenOf(node)) visit(child, nextDepth)
+  }
+  visit(root, 0)
+  return markup
+}
+
+const componentMarkup = {
+  meta: {
+    type: 'suggestion',
+    schema: [
+      {
+        type: 'object',
+        properties: { maxDepth: { type: 'integer' }, maxHostElements: { type: 'integer' } },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      tooMuchMarkup:
+        '{{name}}: JSX 깊이 {{depth}}(최대 {{maxDepth}})·HTML 요소 {{hostElements}}개(최대 {{maxHostElements}}). 구획을 이름 붙은 하위 컴포넌트로 나누고, 반복 모양은 설정 배열 + map이나 공용 컴포넌트로 바꾼다.',
+    },
+  },
+  create(context) {
+    const maxDepth = context.options[0]?.maxDepth ?? MAX_JSX_DEPTH
+    const maxHostElements = context.options[0]?.maxHostElements ?? MAX_HOST_ELEMENTS
+    return {
+      Program(program) {
+        for (const { node, name } of componentsOf(program)) {
+          const { depth, hostElements } = markupOf(node)
+          if (depth <= maxDepth && hostElements <= maxHostElements) continue
+          context.report({ node, messageId: 'tooMuchMarkup', data: { name, depth, maxDepth, hostElements, maxHostElements } })
+        }
+      },
+    }
+  },
+}
+
 export default {
   rules: {
     'component-body': componentBody,
     'no-direct-effect': noDirectEffect,
     'no-store-passthrough': noStorePassthrough,
+    'max-props': maxProps,
+    'component-markup': componentMarkup,
   },
 }
