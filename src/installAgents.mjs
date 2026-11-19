@@ -11,7 +11,9 @@ import { STACK_FILE } from './stack.mjs'
 export const AGENTS_FILE = 'AGENTS.md'
 const START = '<!-- my-fe-harness:start -->'
 const END = '<!-- my-fe-harness:end -->'
-const SIZE_WARN_BYTES = 24 * 1024
+const BYTES_PER_KB = 1024
+const SIZE_WARN_KB = 24
+const SIZE_WARN_BYTES = SIZE_WARN_KB * BYTES_PER_KB
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/
 const LIST_ENTRY = /^\s*-\s*["']?([^"'\n]+?)["']?\s*$/gm
 
@@ -32,7 +34,10 @@ export function installAgents(options, manifest) {
   const sections = collectSections(options, manifest)
   if (sections.length === 0) return { file, status: 'empty' }
 
-  const block = renderBlock(sections)
+  return writeBlock(file, renderBlock(sections), options, manifest)
+}
+
+function writeBlock(file, block, options, manifest) {
   const exists = fs.existsSync(file)
   const text = exists ? fs.readFileSync(file, 'utf8') : ''
   const found = findBlock(text)
@@ -41,13 +46,17 @@ export function installAgents(options, manifest) {
   const outcome = found ? replaceBlock(text, found, block, manifest, options.force) : appendBlock(text, block)
   if (outcome.status === 'kept-modified') return { file, status: outcome.status }
 
-  // 내용이 같아도 기록은 채택한다(매니페스트 유실 복구). 생성 여부는 같은 경로의 기록으로만 이어받는다.
-  const wasCreatedHere = manifest.agents?.file === file && manifest.agents.created
-  manifest.agents = { file, sha: sha256(block), created: wasCreatedHere || !exists }
+  recordAgents(file, block, manifest, exists)
   if (outcome.content !== undefined) writeFileAtomic(file, outcome.content)
 
   const bytes = Buffer.byteLength(outcome.content ?? text)
   return { file, status: outcome.status, bytes, isLarge: bytes > SIZE_WARN_BYTES, hasOverride: hasOverride(file) }
+}
+
+// 내용이 같아도 기록은 채택한다(매니페스트 유실 복구). 생성 여부는 같은 경로의 기록으로만 이어받는다.
+function recordAgents(file, block, manifest, exists) {
+  const wasCreatedHere = manifest.agents?.file === file && manifest.agents.created
+  manifest.agents = { file, sha: sha256(block), created: wasCreatedHere || !exists }
 }
 
 // 우리가 쓴 그대로인 블록만 제거한다. 마커 밖 내용은 블록에 붙은 줄바꿈 외에 건드리지 않는다.
@@ -100,8 +109,12 @@ function replaceBlock(text, found, block, manifest, force) {
 
 // 기존 내용은 그대로 두고 빈 줄 하나로 구분해 끝에 붙인다(removeAgents가 같은 구분자를 되돌린다).
 function appendBlock(text, block) {
-  const separator = text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n'
-  return { status: 'created', content: `${text}${separator}${block}\n` }
+  return { status: 'created', content: `${text}${appendSeparator(text)}${block}\n` }
+}
+
+function appendSeparator(text) {
+  if (text === '') return ''
+  return text.endsWith('\n') ? '\n' : '\n\n'
 }
 
 // 마커가 정확히 한 쌍일 때만 블록으로 인정한다. 짝이 안 맞거나 중복이면 건드리지 않는다.

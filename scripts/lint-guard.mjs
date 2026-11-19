@@ -24,7 +24,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const LINTABLE = /\.(?:[cm]?[jt]sx?)$/
 const ESLINT_TIMEOUT_MS = 90_000
-const MAX_BUFFER = 32 * 1024 * 1024
+const BYTES_PER_KB = 1024
+const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB
+const MAX_BUFFER_MB = 32
+const MAX_BUFFER = MAX_BUFFER_MB * BYTES_PER_MB
 const MAX_REPORTED = 30
 const MAX_STOP_BLOCKS = 3
 const ESLINT_LINT_ERRORS = 1

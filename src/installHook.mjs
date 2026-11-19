@@ -12,36 +12,44 @@ export const GUARD_MARK = 'safety-guard.mjs'
 
 // 강제 훅을 설치한다. 가드 스크립트를 .claude/hooks/에 복사하고 settings.json의 PreToolUse에 병합한다.
 // global=true면 ~/.claude(모든 프로젝트), 아니면 프로젝트별. 훅 커맨드 경로는 스코프에 맞춰 치환 변수를 고른다.
-export function installHook({ targetDir, force = false, dryRun = false, global = false }, manifest) {
+export function installHook(options, manifest) {
+  const target = guardTarget(options)
+  if (!options.dryRun) applyGuard(target, options, manifest)
+  return {
+    scriptDest: target.scriptDest,
+    settingsPath: target.settingsPath,
+    scriptStatus: scriptStatusOf(target.scriptExists, options.force),
+    hookStatus: target.already ? 'exists' : 'added',
+  }
+}
+
+function guardTarget({ targetDir, global }) {
   const base = global ? os.homedir() : targetDir
   const scriptDest = path.join(base, GUARD_REL)
   const settingsPath = path.join(base, '.claude', 'settings.json')
-
-  const scriptExists = fs.existsSync(scriptDest)
   const settings = readJson(settingsPath)
-  const already = hasGuardHook(settings)
+  return { scriptDest, settingsPath, settings, already: hasGuardHook(settings), scriptExists: fs.existsSync(scriptDest) }
+}
 
-  if (!dryRun) {
-    fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
-    if (!scriptExists || force) fs.copyFileSync(GUARD_SRC, scriptDest)
-    if (!already) {
-      addGuardHook(settings, global)
-      fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
-      writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-    }
-    // 매니페스트에 훅 소유권 기록(파일 쓰기는 호출자가 일괄 수행): uninstall이 스크립트 해시를 검증해 삭제한다.
-    // 스크립트를 실제로 쓰지 않았다면(kept) 디스크의 실제 해시를 기록해야
-    // 이후 패키지 업데이트로 소스 해시가 바뀌어도 uninstall이 오분류하지 않는다.
-    const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(GUARD_SRC)
-    manifest.hook = { rel: GUARD_REL, scriptSha, mark: GUARD_MARK }
+function applyGuard(target, { force, global }, manifest) {
+  const { scriptDest, settingsPath, settings, already, scriptExists } = target
+  fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
+  if (!scriptExists || force) fs.copyFileSync(GUARD_SRC, scriptDest)
+  if (!already) {
+    addGuardHook(settings, global)
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
+    writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   }
+  // 매니페스트에 훅 소유권 기록(파일 쓰기는 호출자가 일괄 수행): uninstall이 스크립트 해시를 검증해 삭제한다.
+  // 스크립트를 실제로 쓰지 않았다면(kept) 디스크의 실제 해시를 기록해야
+  // 이후 패키지 업데이트로 소스 해시가 바뀌어도 uninstall이 오분류하지 않는다.
+  const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(GUARD_SRC)
+  manifest.hook = { rel: GUARD_REL, scriptSha, mark: GUARD_MARK }
+}
 
-  return {
-    scriptDest,
-    settingsPath,
-    scriptStatus: scriptExists ? (force ? 'overwritten' : 'kept') : 'created',
-    hookStatus: already ? 'exists' : 'added',
-  }
+function scriptStatusOf(exists, force) {
+  if (!exists) return 'created'
+  return force ? 'overwritten' : 'kept'
 }
 
 function readJson(file) {

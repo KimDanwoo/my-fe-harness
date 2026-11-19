@@ -2,6 +2,8 @@ import readline from 'node:readline/promises'
 import { PACKS, resolvePacks } from './packs.mjs'
 import { STRUCTURES, resolveStructure } from './structures.mjs'
 
+const MENU_ID_WIDTH = 14
+
 export async function promptPackSelection(defaultTokens = null) {
   requireInteractive()
   printPackMenu()
@@ -67,14 +69,14 @@ function printPackMenu() {
   console.log('\n사용 가능한 규칙 팩:\n')
   PACKS.forEach((pack, index) => {
     const kind = pack.kind === 'structure' ? ' [폴더 구조]' : ''
-    console.log(`  ${index + 1}. ${pack.id.padEnd(14)} ${pack.title}${kind} — ${pack.description}`)
+    console.log(`  ${index + 1}. ${pack.id.padEnd(MENU_ID_WIDTH)} ${pack.title}${kind} — ${pack.description}`)
   })
 }
 
 function printStructureMenu() {
   console.log('\n폴더 구조 스캐폴드 (src/ 아래 레이어 폴더 + 규칙 설치):\n')
   STRUCTURES.forEach((structure, index) => {
-    console.log(`  ${index + 1}. ${structure.id.padEnd(14)} ${structure.title} — ${structure.description}`)
+    console.log(`  ${index + 1}. ${structure.id.padEnd(MENU_ID_WIDTH)} ${structure.title} — ${structure.description}`)
   })
 }
 

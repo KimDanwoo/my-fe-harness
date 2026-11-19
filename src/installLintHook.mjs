@@ -21,45 +21,58 @@ const NPM_TIMEOUT_MS = 300_000
 
 // 린트 강제 훅을 설치한다. 스크립트를 .claude/hooks/에 복사하고 settings.json의 PostToolUse·Stop에 병합한다.
 // 고친 파일을 바로 검사하고(PostToolUse), 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(Stop).
-export function installLintHook({ targetDir, force = false, dryRun = false, global = false }, manifest) {
+export function installLintHook(options, manifest) {
+  const target = lintTarget(options)
+  if (!options.dryRun) applyLintHook(target, options, manifest)
+  return {
+    scriptDest: target.scriptDest,
+    settingsPath: target.settingsPath,
+    scriptStatus: scriptStatusOf(target.scriptExists, options.force),
+    hookStatus: target.missingEvents.length > 0 ? 'added' : 'exists',
+  }
+}
+
+function lintTarget({ targetDir, global }) {
   const base = global ? os.homedir() : targetDir
   const scriptDest = path.join(base, LINT_GUARD_REL)
   const settingsPath = path.join(base, '.claude', 'settings.json')
-  const handler = hookHandler(global)
-
-  const scriptExists = fs.existsSync(scriptDest)
   const settings = readJson(settingsPath)
   const missingEvents = LINT_GUARD_EVENTS.filter((event) => !hasHook(settings, event))
+  return { base, scriptDest, settingsPath, settings, missingEvents, scriptExists: fs.existsSync(scriptDest) }
+}
 
-  if (!dryRun) {
-    fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
-    if (!scriptExists || force) fs.copyFileSync(LINT_GUARD_SRC, scriptDest)
-    const baselineDest = path.join(base, BASELINE_REL)
-    if (!fs.existsSync(baselineDest) || force) fs.copyFileSync(BASELINE_SRC, baselineDest)
-    if (missingEvents.length > 0) {
-      for (const event of missingEvents) addHook(settings, event, handler)
-      fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
-      writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-    }
-    const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(LINT_GUARD_SRC)
-    const runtimeStatus = global ? installRuntime(base, force) : 'project-scope'
-    manifest.lintHook = {
-      rel: LINT_GUARD_REL,
-      scriptSha,
-      mark: LINT_GUARD_MARK,
-      events: LINT_GUARD_EVENTS,
-      companions: [{ rel: BASELINE_REL, sha: hashFile(path.join(base, BASELINE_REL)) }],
-      ...(global ? { runtime: RUNTIME_REL } : {}),
-    }
-    manifest.lintHook.runtimeStatus = runtimeStatus
+function applyLintHook(target, { force, global }, manifest) {
+  const { base, scriptDest, settingsPath, settings, missingEvents, scriptExists } = target
+  copyLintFiles(base, scriptDest, scriptExists, force)
+  if (missingEvents.length > 0) {
+    const handler = hookHandler(global)
+    for (const event of missingEvents) addHook(settings, event, handler)
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
+    writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   }
+  const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(LINT_GUARD_SRC)
+  const runtimeStatus = global ? installRuntime(base, force) : 'project-scope'
+  manifest.lintHook = {
+    rel: LINT_GUARD_REL,
+    scriptSha,
+    mark: LINT_GUARD_MARK,
+    events: LINT_GUARD_EVENTS,
+    companions: [{ rel: BASELINE_REL, sha: hashFile(path.join(base, BASELINE_REL)) }],
+    ...(global ? { runtime: RUNTIME_REL } : {}),
+  }
+  manifest.lintHook.runtimeStatus = runtimeStatus
+}
 
-  return {
-    scriptDest,
-    settingsPath,
-    scriptStatus: scriptExists ? (force ? 'overwritten' : 'kept') : 'created',
-    hookStatus: missingEvents.length > 0 ? 'added' : 'exists',
-  }
+function copyLintFiles(base, scriptDest, scriptExists, force) {
+  fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
+  if (!scriptExists || force) fs.copyFileSync(LINT_GUARD_SRC, scriptDest)
+  const baselineDest = path.join(base, BASELINE_REL)
+  if (!fs.existsSync(baselineDest) || force) fs.copyFileSync(BASELINE_SRC, baselineDest)
+}
+
+function scriptStatusOf(exists, force) {
+  if (!exists) return 'created'
+  return force ? 'overwritten' : 'kept'
 }
 
 // 하네스 런타임: 프로젝트에 ESLint가 없을 때 기본 잠금을 검사할 eslint·typescript-eslint를 한 번 설치한다.

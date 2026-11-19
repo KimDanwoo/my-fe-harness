@@ -9,7 +9,9 @@
 // - 내부 오류·미지의 입력은 전부 통과(fail-open) → 훅이 세션을 절대 깨지 않는다.
 // - 외부 의존성 0.
 
-const MAX_SCAN = 256 * 1024 // 대용량 쓰기 방어 — 앞부분만 검사
+const BYTES_PER_KB = 1024
+const MAX_SCAN_KB = 256
+const MAX_SCAN = MAX_SCAN_KB * BYTES_PER_KB // 대용량 쓰기 방어 — 앞부분만 검사
 
 // 실제 자격증명 형식만 (일반 단어 오탐 없음)
 const SECRET_PATTERNS = [
@@ -98,24 +100,30 @@ function shouldScanBashWrite(cmd) {
   return INLINE_INTERP.test(cmd)
 }
 
-function checkBash(input) {
-  const cmd = typeof input.command === 'string' ? input.command : ''
-  if (!cmd) return
+function guardCatastrophicDelete(cmd) {
+  const unquoted = cmd.replace(/['"]/g, ' ')
+  guardRecursiveRm(unquoted)
+  guardFindDelete(unquoted)
+}
 
+function guardRecursiveRm(unquoted) {
   // 1) 루트·홈 통째 삭제. 따옴표를 공백으로 중화해 rm -rf "$HOME"·"/" 우회를 막는다.
   //    (git 검사와 달리 따옴표 '내용'을 지우면 대상 토큰까지 사라지므로 공백 치환이어야 한다.)
   //    루트/홈이 대상이면 재귀 삭제(-r)만으로도 치명적이라 -f 는 요구하지 않는다.
-  const unquoted = cmd.replace(/['"]/g, ' ')
   if (/\brm\b/.test(unquoted) && isRecursiveRm(unquoted) && isCatastrophicTarget(unquoted)) {
     deny(`치명적 삭제로 보입니다(rm -r 루트/홈). 대상 경로를 구체적으로 지정하세요.`)
   }
+}
 
+function guardFindDelete(unquoted) {
   // 1-b) find 로 rm 을 우회한 대량 삭제: find <루트/홈> -delete | -exec rm ...
   const findDestroys = /\s-delete\b/.test(unquoted) || /-exec(?:dir)?\s+rm\b/.test(unquoted)
   if (/\bfind\b/.test(unquoted) && findDestroys && isCatastrophicTarget(unquoted)) {
     deny(`치명적 삭제로 보입니다(find 루트/홈 -delete). 대상 경로를 구체적으로 지정하세요.`)
   }
+}
 
+function guardSecretCommit(cmd) {
   // 2) 비밀 파일을 git에 스테이징/커밋. 따옴표 문자열(커밋 메시지)은 제외해 오탐 방지.
   const cmdNoQuotes = cmd.replace(/"[^"]*"/g, ' ').replace(/'[^']*'/g, ' ')
   if (/\bgit\s+(?:add|commit|stage)\b/.test(cmd) && SECRET_FILE.test(cmdNoQuotes)) {
@@ -124,6 +132,14 @@ function checkBash(input) {
         `.gitignore에 추가하고 커밋에서 제외하세요. 이미 커밋됐다면 히스토리에서 제거해야 합니다.`,
     )
   }
+}
+
+function checkBash(input) {
+  const cmd = typeof input.command === 'string' ? input.command : ''
+  if (!cmd) return
+
+  guardCatastrophicDelete(cmd)
+  guardSecretCommit(cmd)
 
   // 3) 파일에 쓰는 명령이면 본문도 비밀 스캔.
   //    Write/Edit 경로만 막으면 echo/cat > 파일, heredoc, tee, >|, node -e 로 비밀을 써서 우회할 수 있다.
