@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **린트 강제 훅 `lint-guard`** — PostToolUse(Write·Edit·MultiEdit)에서 고친 파일을 프로젝트 ESLint로 검사해
+  에러를 Claude에게 되돌리고, Stop에서 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(세션당 3번까지, fail-open,
+  `MY_FE_HARNESS_LINT_GUARD=off`로 끔). 플러그인은 `hooks.json`으로 자동, npx는 `lint-guard` 명령으로 프로젝트별 설치.
+  `uninstall`·`status`도 이 훅을 다룬다.
+
 ### Changed
 
 - **patterns: 중첩 삼항 금지·컴포넌트 본문 규칙·잠금 절** — 셋 이상 갈래는 매핑 객체·early return·함수로. 컴포넌트

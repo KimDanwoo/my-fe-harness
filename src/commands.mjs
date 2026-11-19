@@ -5,6 +5,7 @@ import { PACKS, rulePacks, resolvePacks, withSafety } from './packs.mjs'
 import { STRUCTURES, resolveStructure } from './structures.mjs'
 import { installRules, rulesBase, ruleSourcePath } from './installRules.mjs'
 import { installHook } from './installHook.mjs'
+import { installLintHook } from './installLintHook.mjs'
 import { installAgents, agentsStatus } from './installAgents.mjs'
 import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
@@ -69,6 +70,20 @@ export async function runScaffold(names, options) {
 
 export function runGuard(options) {
   applyGuard(options)
+}
+
+export function runLintGuard(options) {
+  const { scriptDest, settingsPath, scriptStatus, hookStatus } = withManifest(options, (manifest) =>
+    installLintHook(options, manifest),
+  )
+  const base = options.global ? os.homedir() : options.targetDir
+  const rel = (p) => (options.global ? `~/${path.relative(base, p)}` : path.relative(base, p))
+  const dry = options.dryRun ? '  [dry-run]' : ''
+  console.log(`\n린트 강제 훅 설치${options.global ? ' [전역]' : ''}${dry}\n`)
+  console.log(`  ${hookStatus === 'added' ? '✔' : '↷'} ${rel(settingsPath)}  ${hookStatus === 'added' ? 'PostToolUse·Stop 훅 추가' : '이미 설정됨'}`)
+  console.log(`  ${scriptStatus === 'created' || scriptStatus === 'overwritten' ? '✔' : '↷'} ${rel(scriptDest)}  ${label(scriptStatus)}`)
+  console.log('\n  → Claude가 고친 파일을 그 프로젝트의 ESLint로 바로 검사해 에러를 되돌려주고,')
+  console.log('    바뀐 파일에 에러가 남아 있으면 작업을 끝내지 못하게 한다(같은 세션 3번까지). 끄려면 MY_FE_HARNESS_LINT_GUARD=off.')
 }
 
 export function printList() {
@@ -175,6 +190,10 @@ export function runUninstall(options) {
     console.log(`  ${uninstallIcon(result.hook.scriptStatus)} ${'safety-guard.mjs'.padEnd(20)} ${uninstallLabel(result.hook.scriptStatus)}`)
     console.log(`  ${'settings.json PreToolUse:'.padEnd(22)} ${uninstallLabel(result.hook.settingsStatus)}`)
   }
+  if (result.lintHook) {
+    console.log(`  ${uninstallIcon(result.lintHook.scriptStatus)} ${'lint-guard.mjs'.padEnd(20)} ${uninstallLabel(result.lintHook.scriptStatus)}`)
+    console.log(`  ${'settings.json PostToolUse·Stop:'.padEnd(22)} ${uninstallLabel(result.lintHook.settingsStatus)}`)
+  }
   if (result.agents) {
     const name = displayPath(result.agents.file, options) ?? 'Codex AGENTS.md'
     const status = result.agents.status === 'modified' ? 'kept-modified' : result.agents.status
@@ -197,7 +216,7 @@ export function runStatus(options) {
   ]
 
   console.log(`\n설치 상태${options.global ? ' [전역]' : ''} — ${path.join(claudeDir, 'rules')}\n`)
-  if (entries.length === 0 && !manifest.hook && !manifest.agents) {
+  if (entries.length === 0 && !manifest.hook && !manifest.lintHook && !manifest.agents) {
     console.log('  이 스코프에 my-fe-harness 설치 기록이 없습니다.')
     return
   }
@@ -216,6 +235,10 @@ export function runStatus(options) {
   if (manifest.hook) {
     const s = diskStatus(path.join(resolveClaudeDir(options), manifest.hook.rel.replace(/^\.claude\//, '')), manifest.hook.scriptSha)
     console.log(`  ${statusIcon(s)} ${'safety-guard.mjs'.padEnd(20)} ${statusLabel(s)}`)
+  }
+  if (manifest.lintHook) {
+    const s = diskStatus(path.join(resolveClaudeDir(options), manifest.lintHook.rel.replace(/^\.claude\//, '')), manifest.lintHook.scriptSha)
+    console.log(`  ${statusIcon(s)} ${'lint-guard.mjs'.padEnd(20)} ${statusLabel(s)}`)
   }
   const agents = agentsStatus(options, manifest)
   if (agents) {
@@ -393,6 +416,9 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
                         구조: ${STRUCTURES.map((s) => s.id).join(' | ')}
   guard                 안전장치 강제 훅 설치 (.claude/settings.json + hooks/)
                         비밀 하드코딩·비밀 파일 커밋·치명적 삭제를 실행 전 차단
+  lint-guard            린트 강제 훅 설치 (.claude/settings.json + hooks/)
+                        고친 파일을 프로젝트 ESLint로 바로 검사해 Claude에게 되돌리고,
+                        바뀐 파일에 에러가 남으면 작업을 끝내지 못하게 함
   uninstall             설치한 규칙·훅 걷어내기 (별칭: unsync)
                         매니페스트 해시로 검증 — 우리가 쓴 그대로인 파일만 삭제,
                         직접 수정·생성한 파일은 보존

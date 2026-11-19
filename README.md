@@ -192,6 +192,26 @@ npx github:KimDanwoo/my-fe-harness guard
 > 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
 > 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
 
+### 린트 강제 훅 — 규칙 문서를 지키게 만드는 계층
+
+규칙 문서(중첩 삼항 금지, 컴포넌트 본문 규칙, 매직넘버 금지 등)는 권고라서, 막는 장치가 없으면 LLM이 그 자리에 박아 넣는다.
+`lint-guard.mjs`는 **그 프로젝트의 ESLint 설정**을 그대로 써서 Claude의 작업을 검사한다.
+
+| 이벤트 | 하는 일 |
+|---|---|
+| `PostToolUse` (Write·Edit·MultiEdit) | 방금 고친 파일만 ESLint로 검사해, 에러를 exit 2로 Claude에게 되돌린다 — 그 자리에서 고치게 한다 |
+| `Stop` | 이번 작업에서 바뀐 파일(`git diff HEAD` + 새 파일)에 에러가 남아 있으면 끝내지 못하게 한다. 같은 세션 3번까지만 막는다(무한 반복 방지) |
+
+- **fail-open** — `node_modules/.bin/eslint`가 없는 프로젝트, ESLint 설정 오류, 시간 초과는 전부 통과.
+- **잠금 자체는 프로젝트 ESLint에 있다** — 이 훅은 그 결과를 Claude에게 즉시 돌려주는 통로다. 어떤 규칙을 켤지는 프로젝트가 정한다.
+- 기존 lint 에러가 많은 프로젝트에서는 파일을 건드릴 때마다 그 파일의 에러를 같이 고치게 된다. 그래서 npx 설치는 프로젝트별 선택(opt-in)이다.
+- 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
+
+```bash
+# 프로젝트에 린트 강제 훅 설치(.claude/settings.json의 PostToolUse·Stop에 병합, idempotent)
+npx github:KimDanwoo/my-fe-harness lint-guard
+```
+
 ---
 
 # 3. 되읽기 — `check`로 구조 부식 점검

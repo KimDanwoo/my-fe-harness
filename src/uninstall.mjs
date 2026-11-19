@@ -16,9 +16,11 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
   const rules = removeTracked(manifest.rules, (file) => path.join(rulesDir, file), rulesDir, dryRun)
   const files = removeTracked(manifest.files, (rel) => path.join(claudeDir, rel), claudeDir, dryRun)
   const hook = manifest.hook ? removeHook(manifest.hook, base, claudeDir, dryRun) : null
+  const lintHook = manifest.lintHook ? removeHook(manifest.lintHook, base, claudeDir, dryRun) : null
   const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
 
-  const tracked = rules.length + files.length + (manifest.hook ? 1 : 0) + (manifest.agents ? 1 : 0)
+  const tracked =
+    rules.length + files.length + (manifest.hook ? 1 : 0) + (manifest.lintHook ? 1 : 0) + (manifest.agents ? 1 : 0)
   let manifestRemoved = false
   if (!dryRun && tracked > 0) {
     const mf = manifestPath(claudeDir)
@@ -29,7 +31,7 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
     pruneEmptyDir(path.join(claudeDir, 'rules'))
   }
 
-  return { rules, files, hook, agents, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, lintHook, agents, tracked, manifestRemoved, claudeDir }
 }
 
 function removeTracked(entries, resolve, baseDir, dryRun) {
@@ -55,14 +57,14 @@ function removeHook(hook, base, claudeDir, dryRun) {
     scriptStatus = 'outside-skipped'
   }
 
-  const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, dryRun)
+  const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
   if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)
   return { scriptStatus, settingsStatus }
 }
 
-// PreToolUse에서 우리 가드 훅 그룹만 제거하고 나머지 설정은 보존한다.
-function stripHookEntry(settingsPath, mark, dryRun) {
+// 지정한 이벤트들에서 우리 훅 그룹만 제거하고 나머지 설정은 보존한다.
+function stripHookEntry(settingsPath, mark, events, dryRun) {
   if (!fs.existsSync(settingsPath)) return 'missing'
   let settings
   try {
@@ -70,23 +72,27 @@ function stripHookEntry(settingsPath, mark, dryRun) {
   } catch {
     return 'parse-error'
   }
-  const groups = settings?.hooks?.PreToolUse
-  if (!Array.isArray(groups)) return 'not-present'
+  const removedFrom = events.filter((event) => stripEvent(settings, event, mark))
+  if (removedFrom.length === 0) return 'not-present'
+  if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks
 
+  if (!dryRun) writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+  return 'removed'
+}
+
+function stripEvent(settings, event, mark) {
+  const groups = settings?.hooks?.[event]
+  if (!Array.isArray(groups)) return false
   const kept = groups.filter(
     (group) =>
       !(group?.hooks ?? []).some((handler) =>
         (handler?.args ?? []).some((arg) => typeof arg === 'string' && arg.includes(mark)),
       ),
   )
-  if (kept.length === groups.length) return 'not-present'
-
-  if (kept.length > 0) settings.hooks.PreToolUse = kept
-  else delete settings.hooks.PreToolUse
-  if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks
-
-  if (!dryRun) writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-  return 'removed'
+  if (kept.length === groups.length) return false
+  if (kept.length > 0) settings.hooks[event] = kept
+  else delete settings.hooks[event]
+  return true
 }
 
 // 비어 있을 때만 디렉토리 제거(재귀 삭제 안 함).

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { runInit, runAdd, runScaffold, runGuard, runUninstall, runStatus, runCheck, runUpdate, printList, printHelp } from '../src/commands.mjs'
+import { runInit, runAdd, runScaffold, runGuard, runLintGuard, runUninstall, runStatus, runCheck, runUpdate, printList, printHelp } from '../src/commands.mjs'
 import { PACKAGE_VERSION } from '../src/version.mjs'
 
 function printVersion() {
@@ -52,6 +52,8 @@ async function main() {
       return runScaffold(['fsd'], options)
     case 'guard':
       return runGuard(options)
+    case 'lint-guard':
+      return runLintGuard(options)
     case 'uninstall':
     case 'unsync':
       return runUninstall(options)
