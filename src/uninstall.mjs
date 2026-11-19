@@ -4,6 +4,7 @@ import path from 'node:path'
 import { removeAgents } from './installAgents.mjs'
 import { GUARD_MARK } from './installHook.mjs'
 import { handlerHasMark } from './installLintHook.mjs'
+import { removeVerifySkillDirs } from './installVerifySkill.mjs'
 import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
 // 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
@@ -19,16 +20,23 @@ export function uninstall({ targetDir, dryRun, global }) {
   const hook = manifest.hook ? removeHook(manifest.hook, base, claudeDir, dryRun) : null
   const lintHook = manifest.lintHook ? removeHook(manifest.lintHook, base, claudeDir, dryRun) : null
   const verifyGate = manifest.verifyGate ? removeHook(manifest.verifyGate, base, claudeDir, dryRun) : null
+  const verifySkill = manifest.verifySkill ? removeVerifySkill(manifest.verifySkill, base, dryRun) : null
   const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
 
   const tracked = rules.length + files.length + countRecorded(manifest)
   const manifestRemoved = !dryRun && tracked > 0 && removeManifest(claudeDir)
 
-  return { rules, files, hook, lintHook, verifyGate, agents, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, lintHook, verifyGate, verifySkill, agents, tracked, manifestRemoved, claudeDir }
 }
 
 function countRecorded(manifest) {
-  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.agents].filter(Boolean).length
+  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.verifySkill, manifest.agents].filter(Boolean).length
+}
+
+function removeVerifySkill(verifySkill, base, dryRun) {
+  const files = removeTracked(verifySkill.files, (rel) => path.join(base, rel), base, dryRun)
+  removeVerifySkillDirs(base, dryRun)
+  return files
 }
 
 function removeManifest(claudeDir) {

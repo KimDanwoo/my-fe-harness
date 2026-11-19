@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { runInit, runAdd, runScaffold, runGuard, runLintGuard, runVerifyGate, runUninstall, runStatus, runCheck, runUpdate, printList, printHelp } from '../src/commands.mjs'
+import { runInit, runAdd, runScaffold, runGuard, runLintGuard, runVerifyGate, runVerifySkill, runUninstall, runStatus, runCheck, runUpdate, printList, printHelp } from '../src/commands.mjs'
 import { PACKAGE_VERSION } from '../src/version.mjs'
 
 function printVersion() {
@@ -29,6 +29,7 @@ const COMMANDS = {
   guard: (rest, options) => runGuard(options),
   'lint-guard': (rest, options) => runLintGuard(options),
   'verify-gate': (rest, options) => runVerifyGate(options),
+  'verify-skill': (rest, options) => runVerifySkill(options),
   uninstall: (rest, options) => runUninstall(options),
   unsync: (rest, options) => runUninstall(options),
   status: (rest, options) => runStatus(options),

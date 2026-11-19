@@ -7,6 +7,15 @@
 
 ### Added
 
+- **컴포넌트 본문 규칙(ESLint 플러그인 `harness`)** — `scripts/lint-guard-plugin.mjs`(의존성 0)가 `harness/component-body`(컴포넌트 본문 최상위에는
+  `handleXxx`·`onXxx`만 함수로, 중첩 컴포넌트 금지)와 `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지, `error.tsx`·`global-error.tsx` 허용)를 제공한다.
+  기본 잠금이 `*.tsx`·`*.jsx`에 error로 켠다(테스트 파일 제외). 프로젝트 설정 아래 덧씌움·런타임 설정 모두에서 동작하고, `lint-guard` 설치가
+  플러그인 파일을 `.claude/hooks/`와 런타임 폴더에 복사해 manifest companions에 기록한다(uninstall이 지움).
+- **verify 스킬 틀 `verify-skill`** — 대상 프로젝트에 `.claude/skills/verify/SKILL.md`와 `scripts/verify/`(기준 커밋 대비 화면 비교)를 깐다.
+  package.json에서 빠른 검사·빌드·e2e 명령과 패키지 매니저를, Next App Router·Astro 페이지에서 경로 목록을 감지하고(못 찾으면 `['/']`),
+  서버는 `next start`·`astro preview`·`preview` 스크립트로 띄운다. 기존 파일은 `--force` 없이는 보존, `.gitignore`에 `/.verify/` 추가,
+  `@playwright/test` 설치와 tsconfig·vitest·ESLint 제외는 안내만 한다. `uninstall`·`status`가 다룬다.
+
 - **검증 게이트 `verify-gate`** — 커밋 전에 이 세션이 검증을 돌렸는지 보고(`Verified: none` 예외, 두 번 막히면 통과),
   변경을 판정하는 검사 파일(lint 설정·잠금 테스트·훅·settings)을 고치려면 승인을 받게 한다. 기본은 관찰 모드(기록만).
 

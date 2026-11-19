@@ -7,6 +7,7 @@ import { installRules, rulesBase, ruleSourcePath } from './installRules.mjs'
 import { installHook } from './installHook.mjs'
 import { installLintHook } from './installLintHook.mjs'
 import { installVerifyGate } from './installVerifyGate.mjs'
+import { installVerifySkill } from './installVerifySkill.mjs'
 import { installAgents, agentsStatus } from './installAgents.mjs'
 import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
@@ -21,6 +22,7 @@ const NAME_WIDTH = 20
 const SETTINGS_NAME_WIDTH = 22
 const PACK_FILE_WIDTH = 17
 const PACK_ID_WIDTH = 14
+const VERIFY_FILE_WIDTH = 44
 const BYTES_PER_KB = 1024
 
 // 명령당 매니페스트를 한 번 읽어 넘기고, 끝에 한 번만 쓴다(read-modify-write 중복 제거).
@@ -98,6 +100,19 @@ export function runLintGuard(options) {
   if (options.global) printLintRuntimeStatus(options)
   console.log('\n  → Claude가 고친 파일을 그 프로젝트의 ESLint로 바로 검사해 에러를 되돌려주고,')
   console.log('    바뀐 파일에 에러가 남아 있으면 작업을 끝내지 못하게 한다(같은 세션 3번까지). 끄려면 MY_FE_HARNESS_LINT_GUARD=off.')
+}
+
+const GITIGNORE_LABELS = { created: '.gitignore 만들고 /.verify/ 추가', added: '.gitignore에 /.verify/ 추가', exists: '.gitignore에 이미 있음' }
+
+export function runVerifySkill(options) {
+  const result = withManifest(options, (manifest) => installVerifySkill(options, manifest))
+  const { project, files, gitignore, notes } = result
+  console.log(`\nverify 스킬 설치${dryRunTag(options)} — ${project.framework} · ${project.packageManager} · 경로 ${project.routes.list.length}개\n`)
+  for (const { rel, status } of files) console.log(`  ${status === 'kept' ? '↷' : '✔'} ${rel.padEnd(VERIFY_FILE_WIDTH)} ${label(status)}`)
+  console.log(`  ${gitignore === 'exists' ? '↷' : '✔'} ${GITIGNORE_LABELS[gitignore]}`)
+  if (files.some(({ status }) => status === 'kept')) console.log('\n  이미 있는 파일은 보존했습니다. 덮어쓰려면 --force')
+  console.log('\n  → 직접 해야 할 일(자동으로 고치지 않습니다):')
+  for (const note of notes) console.log(`    - ${note}`)
 }
 
 const RUNTIME_LABELS = { installed: '설치함', kept: '이미 최신', failed: '설치 실패 — npm 로그 확인', skipped: '건너뜀' }
@@ -240,6 +255,7 @@ function printUninstalledHooks(result, options) {
   if (result.hook) printUninstalledSettingsHook('safety-guard.mjs', 'settings.json PreToolUse:', result.hook)
   if (result.lintHook) printUninstalledSettingsHook('lint-guard.mjs', 'settings.json PostToolUse·Stop:', result.lintHook)
   if (result.verifyGate) console.log(uninstallRow('verify-gate.mjs', result.verifyGate.scriptStatus, ''))
+  for (const { file, status } of result.verifySkill ?? []) console.log(uninstallRow(file, status, ''))
   if (result.agents) printUninstalledAgents(result.agents, options)
 }
 
@@ -271,7 +287,7 @@ export function runStatus(options) {
 }
 
 function hasInstallRecord(entries, manifest) {
-  return entries.length > 0 || Boolean(manifest.hook || manifest.lintHook || manifest.verifyGate || manifest.agents)
+  return entries.length > 0 || Boolean(manifest.hook || manifest.lintHook || manifest.verifyGate || manifest.verifySkill || manifest.agents)
 }
 
 function printStatusVersion(manifest) {
@@ -292,6 +308,7 @@ function hookDiskStatus(options, hook) {
 function printStatusHooks(options, manifest) {
   if (manifest.hook) printStatusRow('safety-guard.mjs', hookDiskStatus(options, manifest.hook), '')
   if (manifest.lintHook) printStatusRow('lint-guard.mjs', hookDiskStatus(options, manifest.lintHook), '')
+  for (const [rel, sha] of Object.entries(manifest.verifySkill?.files ?? {})) printStatusRow(rel, diskStatus(path.join(options.targetDir, rel), sha), '')
 }
 
 function printStatusAgents(options, manifest) {
@@ -474,6 +491,9 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
   guard                 안전장치 강제 훅 설치 (.claude/settings.json + hooks/)
                         비밀 하드코딩·비밀 파일 커밋·치명적 삭제를 실행 전 차단
   verify-gate           검증 게이트 설치 (커밋 전 검증 여부·검사 파일 보호, 기본 관찰 모드)
+  verify-skill          대상 프로젝트에 verify 스킬(.claude/skills/verify)과 화면 비교 스크립트(scripts/verify/)를 깜
+                        package.json에서 검사·빌드·e2e 명령과 Next/Astro 경로를 감지해 채움
+                        (기존 파일은 --force 없이는 보존, uninstall이 걷어냄, 프로젝트 전용)
   lint-guard            린트 강제 훅 설치 (.claude/settings.json + hooks/)
                         고친 파일을 프로젝트 ESLint로 바로 검사해 Claude에게 되돌리고,
                         바뀐 파일에 에러가 남으면 작업을 끝내지 못하게 함
