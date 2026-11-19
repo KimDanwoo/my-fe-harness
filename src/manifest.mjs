@@ -46,6 +46,7 @@ export function readManifest(claudeDir) {
       files: plainObject(data.files),
       hook: data.hook ?? null,
       lintHook: data.lintHook ?? null,
+      verifyGate: data.verifyGate ?? null,
       agents: agentsRecord(data.agents),
     }
   } catch {
@@ -59,7 +60,7 @@ export function writeManifest(claudeDir, manifest) {
 }
 
 function emptyManifest() {
-  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null, lintHook: null, agents: null }
+  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null, lintHook: null, verifyGate: null, agents: null }
 }
 
 // AGENTS.md 블록 소유 기록. 형식이 어긋나면 기록 없음으로 취급(블록을 우리 것으로 오인하지 않는다).

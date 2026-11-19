@@ -7,6 +7,9 @@
 
 ### Added
 
+- **검증 게이트 `verify-gate`** — 커밋 전에 이 세션이 검증을 돌렸는지 보고(`Verified: none` 예외, 두 번 막히면 통과),
+  변경을 판정하는 검사 파일(lint 설정·잠금 테스트·훅·settings)을 고치려면 승인을 받게 한다. 기본은 관찰 모드(기록만).
+
 - **lint-guard 런타임** — `lint-guard --global`이 `~/.claude/my-fe-harness-runtime`에 eslint 10.15·typescript-eslint 8.73·
   typescript 6.0.3을 설치한다. ESLint가 없는 프로젝트에서도 하네스 기본 잠금을 그 런타임으로 검사한다(.js·.ts·.tsx 등).
   `uninstall --global`이 런타임 폴더를 지운다.
@@ -29,6 +32,8 @@
   셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
 
 ### Changed
+
+- **하네스 코드도 기본 잠금을 지킨다** — 복잡도 10 초과 함수·중첩 삼항·매직넘버 38건을 함수 분리·상수로 정리(동작 동일).
 
 - **FSD: Next.js 레이어 이름은 `_app`·`_pages`** — FSD 공식 Next.js 가이드대로 둘 다 밑줄 접두로 바꾸도록 했다(`views` 대안 제거).
   `check`는 `_app`·`_pages` 폴더를 같은 레이어로 검사한다. 정적 자산은 쓰는 곳에(슬라이스 `assets/` 또는 `shared/assets/`),

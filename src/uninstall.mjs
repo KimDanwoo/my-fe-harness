@@ -8,7 +8,7 @@ import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from 
 
 // 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
 // 해시가 다르면(사용자 수정) 보존하고, 경로가 .claude 밖이면(변조된 매니페스트) 건너뛴다.
-export function uninstall({ targetDir, dryRun = false, global = false }) {
+export function uninstall({ targetDir, dryRun, global }) {
   const base = global ? os.homedir() : targetDir
   const claudeDir = path.join(base, '.claude')
   const manifest = readManifest(claudeDir)
@@ -18,21 +18,25 @@ export function uninstall({ targetDir, dryRun = false, global = false }) {
   const files = removeTracked(manifest.files, (rel) => path.join(claudeDir, rel), claudeDir, dryRun)
   const hook = manifest.hook ? removeHook(manifest.hook, base, claudeDir, dryRun) : null
   const lintHook = manifest.lintHook ? removeHook(manifest.lintHook, base, claudeDir, dryRun) : null
+  const verifyGate = manifest.verifyGate ? removeHook(manifest.verifyGate, base, claudeDir, dryRun) : null
   const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
 
-  const tracked =
-    rules.length + files.length + (manifest.hook ? 1 : 0) + (manifest.lintHook ? 1 : 0) + (manifest.agents ? 1 : 0)
-  let manifestRemoved = false
-  if (!dryRun && tracked > 0) {
-    const mf = manifestPath(claudeDir)
-    if (fs.existsSync(mf)) {
-      fs.unlinkSync(mf)
-      manifestRemoved = true
-    }
-    pruneEmptyDir(path.join(claudeDir, 'rules'))
-  }
+  const tracked = rules.length + files.length + countRecorded(manifest)
+  const manifestRemoved = !dryRun && tracked > 0 && removeManifest(claudeDir)
 
-  return { rules, files, hook, lintHook, agents, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, lintHook, verifyGate, agents, tracked, manifestRemoved, claudeDir }
+}
+
+function countRecorded(manifest) {
+  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.agents].filter(Boolean).length
+}
+
+function removeManifest(claudeDir) {
+  const mf = manifestPath(claudeDir)
+  const existed = fs.existsSync(mf)
+  if (existed) fs.unlinkSync(mf)
+  pruneEmptyDir(path.join(claudeDir, 'rules'))
+  return existed
 }
 
 function removeTracked(entries, resolve, baseDir, dryRun) {
@@ -50,21 +54,27 @@ function removeHook(hook, base, claudeDir, dryRun) {
   const scriptDest = path.join(base, hook.rel)
   const settingsPath = path.join(claudeDir, 'settings.json')
 
-  let scriptStatus = 'missing'
-  if (isInside(claudeDir, scriptDest) && fs.existsSync(scriptDest)) {
-    scriptStatus = hashFile(scriptDest) === hook.scriptSha ? 'removed' : 'kept-modified'
-    if (!dryRun && scriptStatus === 'removed') fs.unlinkSync(scriptDest)
-  } else if (!isInside(claudeDir, scriptDest)) {
-    scriptStatus = 'outside-skipped'
-  }
-
+  const scriptStatus = removeScript(scriptDest, hook.scriptSha, claudeDir, dryRun)
   for (const companion of hook.companions ?? []) removeCompanion(path.join(base, companion.rel), companion.sha, claudeDir, dryRun)
-  const runtimeDir = hook.runtime ? path.join(base, hook.runtime) : null
-  if (runtimeDir && isInside(claudeDir, runtimeDir) && !dryRun) fs.rmSync(runtimeDir, { recursive: true, force: true })
+  removeRuntime(hook, base, claudeDir, dryRun)
   const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
   if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)
   return { scriptStatus, settingsStatus }
+}
+
+function removeScript(scriptDest, recordedSha, claudeDir, dryRun) {
+  if (!isInside(claudeDir, scriptDest)) return 'outside-skipped'
+  if (!fs.existsSync(scriptDest)) return 'missing'
+  if (hashFile(scriptDest) !== recordedSha) return 'kept-modified'
+  if (!dryRun) fs.unlinkSync(scriptDest)
+  return 'removed'
+}
+
+function removeRuntime(hook, base, claudeDir, dryRun) {
+  if (!hook.runtime || dryRun) return
+  const runtimeDir = path.join(base, hook.runtime)
+  if (isInside(claudeDir, runtimeDir)) fs.rmSync(runtimeDir, { recursive: true, force: true })
 }
 
 // 훅이 함께 쓰는 파일(예: lint-guard의 기본 잠금)도 우리가 쓴 그대로일 때만 지운다.

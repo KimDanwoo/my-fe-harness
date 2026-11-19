@@ -192,6 +192,22 @@ npx github:KimDanwoo/my-fe-harness guard
 > 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
 > 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
 
+### 검증 게이트 — 증거 없이 커밋하지 않게, 변경이 자기 검사를 고치지 못하게
+
+[Claude Code 팀의 검증 원칙](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/)을 PreToolUse 훅으로 옮겼다(`verify-gate.mjs`).
+
+| 대상 | 하는 일 |
+|---|---|
+| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과 |
+| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) |
+
+- 모드 `MY_FE_HARNESS_VERIFY_GATE`: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`.
+  새 게이트는 관찰 모드로 시작해 오탐을 확인한 뒤 강제로 바꾼다.
+
+```bash
+npx github:KimDanwoo/my-fe-harness verify-gate --global
+```
+
 ### 린트 강제 훅 — 규칙 문서를 지키게 만드는 계층
 
 규칙 문서(중첩 삼항 금지, 컴포넌트 본문 규칙, 매직넘버 금지 등)는 권고라서, 막는 장치가 없으면 LLM이 그 자리에 박아 넣는다.
