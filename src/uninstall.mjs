@@ -58,10 +58,17 @@ function removeHook(hook, base, claudeDir, dryRun) {
     scriptStatus = 'outside-skipped'
   }
 
+  for (const companion of hook.companions ?? []) removeCompanion(path.join(base, companion.rel), companion.sha, claudeDir, dryRun)
   const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
   if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)
   return { scriptStatus, settingsStatus }
+}
+
+// 훅이 함께 쓰는 파일(예: lint-guard의 기본 잠금)도 우리가 쓴 그대로일 때만 지운다.
+function removeCompanion(file, sha, claudeDir, dryRun) {
+  if (!isInside(claudeDir, file) || !fs.existsSync(file) || hashFile(file) !== sha) return
+  if (!dryRun) fs.unlinkSync(file)
 }
 
 // 지정한 이벤트들에서 우리 훅 그룹만 제거하고 나머지 설정은 보존한다.

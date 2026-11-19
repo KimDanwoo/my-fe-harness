@@ -6,9 +6,11 @@ import { hashFile, writeFileAtomic } from './manifest.mjs'
 
 const LINT_GUARD_SRC = fileURLToPath(new URL('../scripts/lint-guard.mjs', import.meta.url))
 const LINT_GUARD_REL = '.claude/hooks/lint-guard.mjs'
+const BASELINE_SRC = fileURLToPath(new URL('../scripts/lint-guard-baseline.mjs', import.meta.url))
+const BASELINE_REL = '.claude/hooks/lint-guard-baseline.mjs'
 export const LINT_GUARD_MARK = 'lint-guard.mjs'
 export const LINT_MATCHER = 'Write|Edit|MultiEdit'
-export const LINT_GUARD_EVENTS = ['PostToolUse', 'Stop']
+export const LINT_GUARD_EVENTS = ['PostToolUse', 'Stop', 'SubagentStop']
 const LINT_GUARD_TIMEOUT_SECONDS = 120
 
 // 린트 강제 훅을 설치한다. 스크립트를 .claude/hooks/에 복사하고 settings.json의 PostToolUse·Stop에 병합한다.
@@ -26,13 +28,21 @@ export function installLintHook({ targetDir, force = false, dryRun = false, glob
   if (!dryRun) {
     fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
     if (!scriptExists || force) fs.copyFileSync(LINT_GUARD_SRC, scriptDest)
+    const baselineDest = path.join(base, BASELINE_REL)
+    if (!fs.existsSync(baselineDest) || force) fs.copyFileSync(BASELINE_SRC, baselineDest)
     if (missingEvents.length > 0) {
       for (const event of missingEvents) addHook(settings, event, handler)
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
       writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
     }
     const scriptSha = scriptExists && !force ? hashFile(scriptDest) : hashFile(LINT_GUARD_SRC)
-    manifest.lintHook = { rel: LINT_GUARD_REL, scriptSha, mark: LINT_GUARD_MARK, events: LINT_GUARD_EVENTS }
+    manifest.lintHook = {
+      rel: LINT_GUARD_REL,
+      scriptSha,
+      mark: LINT_GUARD_MARK,
+      events: LINT_GUARD_EVENTS,
+      companions: [{ rel: BASELINE_REL, sha: hashFile(path.join(base, BASELINE_REL)) }],
+    }
   }
 
   return {
@@ -79,5 +89,5 @@ function hasHook(settings, event) {
 function addHook(settings, event, handler) {
   settings.hooks ??= {}
   settings.hooks[event] ??= []
-  settings.hooks[event].push(event === 'Stop' ? { hooks: [handler] } : { matcher: LINT_MATCHER, hooks: [handler] })
+  settings.hooks[event].push(event === 'PostToolUse' ? { matcher: LINT_MATCHER, hooks: [handler] } : { hooks: [handler] })
 }

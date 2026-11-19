@@ -76,10 +76,11 @@ test('검사 대상이 아닌 파일·ESLint 없는 프로젝트·설정 오류�
   assert.equal(spawnSync('node', [GUARD], { input: 'not json' }).status, 0)
 })
 
-test('끝내기 전: 바뀐 파일에 에러가 남으면 막고, 같은 세션 3번 뒤에는 놓아준다', () => {
-  const root = project({ git: true })
-  fs.writeFileSync(path.join(root, 'src', 'base.ts'), 'BAD\n')
-  const stop = { hook_event_name: 'Stop', cwd: root, session_id: `s${Date.now()}` }
+test('끝내기 전: 이 세션이 고친 파일에 에러가 남으면 막고, 3번 뒤에는 놓아준다', () => {
+  const root = project()
+  const session = `s${Date.now()}`
+  runGuard({ ...edit(root, 'a.ts', 'BAD'), session_id: session })
+  const stop = { hook_event_name: 'Stop', cwd: root, session_id: session }
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const r = runGuard(stop)
     assert.equal(r.status, 2)
@@ -88,10 +89,21 @@ test('끝내기 전: 바뀐 파일에 에러가 남으면 막고, 같은 세션 
   assert.equal(runGuard(stop).status, 0)
 })
 
-test('끝내기 전: 바뀐 파일이 깨끗하면 통과한다(새 파일 포함)', () => {
-  const root = project({ git: true })
-  fs.writeFileSync(path.join(root, 'src', 'new.ts'), 'ok\n')
-  assert.equal(runGuard({ hook_event_name: 'Stop', cwd: root, session_id: 'clean' }).status, 0)
+test('끝내기 전: 고친 파일을 고쳐 두었으면 통과하고, 다른 에이전트가 고친 파일은 보지 않는다', () => {
+  const root = project()
+  const session = `t${Date.now()}`
+  runGuard({ ...edit(root, 'mine.ts', 'BAD'), session_id: session })
+  runGuard({ ...edit(root, 'theirs.ts', 'BAD'), session_id: session, agent_id: 'designer-1' })
+  fs.writeFileSync(path.join(root, 'src', 'mine.ts'), 'ok')
+  assert.equal(runGuard({ hook_event_name: 'Stop', cwd: root, session_id: session }).status, 0)
+  const sub = runGuard({ hook_event_name: 'SubagentStop', cwd: root, session_id: session, agent_id: 'designer-1' })
+  assert.equal(sub.status, 2)
+  assert.match(sub.stderr, /theirs\.ts/)
+  assert.doesNotMatch(sub.stderr, /mine\.ts/)
+})
+
+test('고친 적이 없으면 끝낼 때 아무것도 하지 않는다', () => {
+  assert.equal(runGuard({ hook_event_name: 'Stop', cwd: project(), session_id: `none${Date.now()}` }).status, 0)
 })
 
 test('lint-guard 명령이 PostToolUse·Stop 훅을 설치하고 uninstall이 걷어낸다', () => {
@@ -104,11 +116,15 @@ test('lint-guard 명령이 PostToolUse·Stop 훅을 설치하고 uninstall이 �
   const installed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
   assert.equal(installed.hooks.PostToolUse[0].matcher, 'Write|Edit|MultiEdit')
   assert.equal(installed.hooks.Stop.length, 2)
+  assert.equal(installed.hooks.SubagentStop.length, 1)
   assert.ok(fs.existsSync(path.join(root, '.claude', 'hooks', 'lint-guard.mjs')))
+  assert.ok(fs.existsSync(path.join(root, '.claude', 'hooks', 'lint-guard-baseline.mjs')))
 
   assert.equal(spawnSync('node', [CLI, 'uninstall', '--target', root]).status, 0)
+  assert.ok(!fs.existsSync(path.join(root, '.claude', 'hooks', 'lint-guard-baseline.mjs')))
   const after = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
   assert.equal(after.hooks.PostToolUse, undefined)
+  assert.equal(after.hooks.SubagentStop, undefined)
   assert.deepEqual(after.hooks.Stop, [{ hooks: [{ type: 'command', command: 'echo keep' }] }])
   assert.ok(!fs.existsSync(path.join(root, '.claude', 'hooks', 'lint-guard.mjs')))
 })
@@ -125,4 +141,34 @@ test('전역 사본이 있으면 프로젝트 사본은 양보한다', () => {
   fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true })
   fs.copyFileSync(GUARD, path.join(home, '.claude', 'hooks', 'lint-guard.mjs'))
   assert.equal(runGuard(edit(project(), 'a.ts', 'BAD'), { HOME: home }).status, 0)
+})
+
+test('기본 잠금: 프로젝트 ESLint 설정이 있으면 기본 잠금을 깐 설정으로 검사하고, 그게 실패하면 프로젝트 설정만으로 검사한다', () => {
+  const root = project()
+  const argsLog = path.join(root, 'args.log')
+  const bin = path.join(root, 'node_modules', '.bin', 'eslint')
+  fs.writeFileSync(bin, `#!/usr/bin/env node
+const fs = require('node:fs')
+fs.appendFileSync(${JSON.stringify(argsLog)}, process.argv.slice(2).join(' ') + '\\n')
+if (process.argv.includes('--config')) process.exit(2)
+process.stdout.write('[]')
+`, { mode: 0o755 })
+  fs.writeFileSync(path.join(root, 'eslint.config.mjs'), 'export default []\n')
+  assert.equal(runGuard(edit(root, 'a.ts', 'ok')).status, 0)
+  const calls = fs.readFileSync(argsLog, 'utf8').trim().split('\n')
+  assert.equal(calls.length, 2)
+  assert.match(calls[0], /^--config \S+\.mjs --fix/)
+  assert.match(calls[1], /^--fix/)
+})
+
+test('기본 잠금: 중첩 삼항·복잡도·매직넘버 규칙과 인라인 끄기 금지를 담는다', async () => {
+  const { harnessBaseline } = await import('../scripts/lint-guard-baseline.mjs')
+  const configs = harnessBaseline([])
+  const rules = Object.assign({}, ...configs.map((config) => config.rules ?? {}))
+  assert.equal(configs[0].linterOptions.noInlineConfig, true)
+  assert.equal(rules['no-nested-ternary'], 'error')
+  assert.deepEqual(rules.complexity, ['error', 10])
+  assert.ok(rules['no-magic-numbers'])
+  const withTs = harnessBaseline([{ plugins: { '@typescript-eslint': {} } }])
+  assert.ok(withTs.some((config) => config.rules?.['@typescript-eslint/no-magic-numbers']))
 })

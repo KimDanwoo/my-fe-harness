@@ -7,6 +7,12 @@
 
 ### Added
 
+- **lint-guard 강화** — 고친 파일을 `eslint --fix`로 먼저 자동 수정하고 남은 에러만 되돌린다. 끝낼 때는 그 세션·그 에이전트가
+  고친 파일만 본다(다른 에이전트 작업 중인 파일로 막지 않음). 서브에이전트 종료(SubagentStop)도 같은 검사를 받는다.
+- **기본 잠금(바닥선) `lint-guard-baseline.mjs`** — 중첩 삼항·복잡도 10·중첩 깊이 3·함수 120줄·컴포넌트 파일 250줄·매직넘버·
+  인라인 끄기 금지를 ESLint 기본 규칙으로 정의해, 프로젝트 설정 "아래에" 깔고 검사한다. 프로젝트가 필요한 곳은 뒤에서 끌 수 있고,
+  덧씌움이 실패하면 프로젝트 설정만으로 검사한다.
+
 - **린트 강제 훅 `lint-guard`** — PostToolUse(Write·Edit·MultiEdit)에서 고친 파일을 프로젝트 ESLint로 검사해
   에러를 Claude에게 되돌리고, Stop에서 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(세션당 3번까지, fail-open,
   `MY_FE_HARNESS_LINT_GUARD=off`로 끔). 플러그인은 `hooks.json`으로 자동, npx는 `lint-guard` 명령으로 프로젝트별 설치.
