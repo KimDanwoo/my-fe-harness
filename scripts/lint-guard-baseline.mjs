@@ -9,6 +9,15 @@ const ALLOWED_NUMBERS = [-1, 0, 1, 2, 100]
 const LENGTH_OPTIONS = { skipBlankLines: true, skipComments: true }
 const NUMBER_HOMES = ['**/config/**', '**/constants/**', '**/constants.*', '**/*.config.*']
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']
+const COMPONENTS_AND_HOOKS = ['**/*.tsx', '**/*.jsx', '**/use[A-Z]*.{ts,js,mts,mjs}']
+const GENERATED_AND_VENDOR = [
+  '**/storybook-static/**',
+  '**/public/**',
+  '**/vendor/**',
+  '**/*.min.js',
+  '**/.turbo/**',
+  '**/generated/**',
+]
 
 const usesTypeScriptPlugin = (configs) => configs.some((config) => config?.plugins?.['@typescript-eslint'])
 
@@ -27,6 +36,7 @@ export function harnessBaseline(projectConfigs) {
   const magicNumbers = magicNumbersRule(projectConfigs)
   const magicNumbersOff = Object.fromEntries(Object.keys(magicNumbers).map((rule) => [rule, 'off']))
   return [
+    { ignores: GENERATED_AND_VENDOR },
     { linterOptions: { noInlineConfig: true } },
     {
       rules: {
@@ -34,9 +44,9 @@ export function harnessBaseline(projectConfigs) {
         complexity: ['error', MAX_COMPLEXITY],
         'max-depth': ['error', MAX_DEPTH],
         'max-lines-per-function': ['error', { max: MAX_FUNCTION_LINES, ...LENGTH_OPTIONS }],
-        ...magicNumbers,
       },
     },
+    { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
     { files: ['**/*.tsx', '**/*.jsx'], rules: { 'max-lines': ['error', { max: MAX_COMPONENT_FILE_LINES, ...LENGTH_OPTIONS }] } },
     { files: NUMBER_HOMES, rules: magicNumbersOff },
     { files: TESTS, rules: { ...magicNumbersOff, 'max-lines-per-function': 'off' } },
