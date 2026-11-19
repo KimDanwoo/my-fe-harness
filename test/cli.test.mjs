@@ -151,13 +151,36 @@ test('add --global writes to sandboxed ~/.claude/rules', () =>
     assert.deepEqual(rr, ['patterns.md', 'safety.md', 'typescript.md'])
   }))
 
-test('guard --global uses ${HOME} hook path in ~/.claude/settings.json', () =>
+// args(exec 형식)는 셸이 없어 $HOME이 펼쳐지지 않는다 — 전역은 셸 형식이어야 한다.
+// https://code.claude.com/docs/en/hooks ("Exec form ... There is no shell")
+test('guard --global writes a shell-form hook so $HOME expands', () =>
   withTmp((home) => {
     cli(['guard', '--global'], { env: { ...process.env, HOME: home } })
     const s = JSON.parse(fs.readFileSync(path.join(home, '.claude/settings.json'), 'utf8'))
-    const arg = s.hooks.PreToolUse[0].hooks[0].args[0]
-    assert.match(arg, /^\$\{HOME\}\/\.claude\/hooks\/safety-guard\.mjs$/)
+    const handler = s.hooks.PreToolUse[0].hooks[0]
+    assert.equal(handler.command, 'node "$HOME/.claude/hooks/safety-guard.mjs"')
+    assert.equal(handler.args, undefined)
     assert.ok(fs.existsSync(path.join(home, '.claude/hooks/safety-guard.mjs')))
+  }))
+
+test('guard --global does not duplicate an existing shell-form guard hook', () =>
+  withTmp((home) => {
+    const settingsPath = path.join(home, '.claude/settings.json')
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
+    const existing = { matcher: 'Write', hooks: [{ type: 'command', command: 'node "$HOME/.claude/hooks/safety-guard.mjs"' }] }
+    fs.writeFileSync(settingsPath, JSON.stringify({ hooks: { PreToolUse: [existing] } }))
+    cli(['guard', '--global'], { env: { ...process.env, HOME: home } })
+    const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    assert.equal(s.hooks.PreToolUse.length, 1)
+  }))
+
+test('lint-guard --global writes shell-form PostToolUse·Stop hooks', () =>
+  withTmp((home) => {
+    cli(['lint-guard', '--global'], { env: { ...process.env, HOME: home } })
+    const s = JSON.parse(fs.readFileSync(path.join(home, '.claude/settings.json'), 'utf8'))
+    for (const event of ['PostToolUse', 'Stop'])
+      assert.equal(s.hooks[event][0].hooks[0].command, 'node "$HOME/.claude/hooks/lint-guard.mjs"')
+    assert.ok(fs.existsSync(path.join(home, '.claude/hooks/lint-guard.mjs')))
   }))
 
 // ---- framework auto-detect ----

@@ -17,7 +17,7 @@ export function installLintHook({ targetDir, force = false, dryRun = false, glob
   const base = global ? os.homedir() : targetDir
   const scriptDest = path.join(base, LINT_GUARD_REL)
   const settingsPath = path.join(base, '.claude', 'settings.json')
-  const commandArg = `\${${global ? 'HOME' : 'CLAUDE_PROJECT_DIR'}}/${LINT_GUARD_REL}`
+  const handler = hookHandler(global)
 
   const scriptExists = fs.existsSync(scriptDest)
   const settings = readJson(settingsPath)
@@ -27,7 +27,7 @@ export function installLintHook({ targetDir, force = false, dryRun = false, glob
     fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
     if (!scriptExists || force) fs.copyFileSync(LINT_GUARD_SRC, scriptDest)
     if (missingEvents.length > 0) {
-      for (const event of missingEvents) addHook(settings, event, commandArg)
+      for (const event of missingEvents) addHook(settings, event, handler)
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
       writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
     }
@@ -57,19 +57,27 @@ function readJson(file) {
   return parsed
 }
 
+// args(exec 형식)는 셸 없이 실행돼 \${CLAUDE_PROJECT_DIR} 같은 경로 플레이스홀더만 치환된다.
+// 전역 경로의 $HOME은 셸 형식이어야 펼쳐진다. https://code.claude.com/docs/en/hooks
+function hookHandler(global) {
+  const timeout = LINT_GUARD_TIMEOUT_SECONDS
+  if (global) return { type: 'command', command: `node "$HOME/${LINT_GUARD_REL}"`, timeout }
+  return { type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/${LINT_GUARD_REL}`], timeout }
+}
+
+export function handlerHasMark(handler, mark) {
+  const parts = [handler?.command, ...(handler?.args ?? [])]
+  return parts.some((part) => typeof part === 'string' && part.includes(mark))
+}
+
 function hasHook(settings, event) {
   const groups = settings?.hooks?.[event]
   if (!Array.isArray(groups)) return false
-  return groups.some((group) =>
-    (group?.hooks ?? []).some((handler) =>
-      (handler?.args ?? []).some((arg) => typeof arg === 'string' && arg.includes(LINT_GUARD_MARK)),
-    ),
-  )
+  return groups.some((group) => (group?.hooks ?? []).some((handler) => handlerHasMark(handler, LINT_GUARD_MARK)))
 }
 
-function addHook(settings, event, commandArg) {
+function addHook(settings, event, handler) {
   settings.hooks ??= {}
   settings.hooks[event] ??= []
-  const handler = { type: 'command', command: 'node', args: [commandArg], timeout: LINT_GUARD_TIMEOUT_SECONDS }
   settings.hooks[event].push(event === 'Stop' ? { hooks: [handler] } : { matcher: LINT_MATCHER, hooks: [handler] })
 }

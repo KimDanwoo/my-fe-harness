@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { removeAgents } from './installAgents.mjs'
 import { GUARD_MARK } from './installHook.mjs'
+import { handlerHasMark } from './installLintHook.mjs'
 import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
 // 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
@@ -83,12 +84,7 @@ function stripHookEntry(settingsPath, mark, events, dryRun) {
 function stripEvent(settings, event, mark) {
   const groups = settings?.hooks?.[event]
   if (!Array.isArray(groups)) return false
-  const kept = groups.filter(
-    (group) =>
-      !(group?.hooks ?? []).some((handler) =>
-        (handler?.args ?? []).some((arg) => typeof arg === 'string' && arg.includes(mark)),
-      ),
-  )
+  const kept = groups.filter((group) => !(group?.hooks ?? []).some((handler) => handlerHasMark(handler, mark)))
   if (kept.length === groups.length) return false
   if (kept.length > 0) settings.hooks[event] = kept
   else delete settings.hooks[event]

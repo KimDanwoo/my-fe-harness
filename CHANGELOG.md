@@ -11,6 +11,12 @@
   에러를 Claude에게 되돌리고, Stop에서 바뀐 파일에 에러가 남으면 끝내지 못하게 한다(세션당 3번까지, fail-open,
   `MY_FE_HARNESS_LINT_GUARD=off`로 끔). 플러그인은 `hooks.json`으로 자동, npx는 `lint-guard` 명령으로 프로젝트별 설치.
   `uninstall`·`status`도 이 훅을 다룬다.
+  전역 사본이 있으면 프로젝트·플러그인 사본은 양보한다(중복 검사 방지).
+
+### Fixed
+
+- **`--global` 훅 경로** — exec 형식(`args`)은 셸이 없어 `${HOME}`이 펼쳐지지 않는다. 전역 설치(`guard`·`lint-guard`)는
+  셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
 
 ### Changed
 

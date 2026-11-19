@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { handlerHasMark } from './installLintHook.mjs'
 import { hashFile, writeFileAtomic } from './manifest.mjs'
 
 const GUARD_SRC = fileURLToPath(new URL('../scripts/safety-guard.mjs', import.meta.url))
@@ -15,7 +16,6 @@ export function installHook({ targetDir, force = false, dryRun = false, global =
   const base = global ? os.homedir() : targetDir
   const scriptDest = path.join(base, GUARD_REL)
   const settingsPath = path.join(base, '.claude', 'settings.json')
-  const commandArg = `\${${global ? 'HOME' : 'CLAUDE_PROJECT_DIR'}}/${GUARD_REL}`
 
   const scriptExists = fs.existsSync(scriptDest)
   const settings = readJson(settingsPath)
@@ -25,7 +25,7 @@ export function installHook({ targetDir, force = false, dryRun = false, global =
     fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
     if (!scriptExists || force) fs.copyFileSync(GUARD_SRC, scriptDest)
     if (!already) {
-      addGuardHook(settings, commandArg)
+      addGuardHook(settings, global)
       fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
       writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
     }
@@ -62,18 +62,15 @@ function readJson(file) {
 function hasGuardHook(settings) {
   const groups = settings?.hooks?.PreToolUse
   if (!Array.isArray(groups)) return false
-  return groups.some((group) =>
-    (group?.hooks ?? []).some((handler) =>
-      (handler?.args ?? []).some((arg) => typeof arg === 'string' && arg.includes(GUARD_MARK)),
-    ),
-  )
+  return groups.some((group) => (group?.hooks ?? []).some((handler) => handlerHasMark(handler, GUARD_MARK)))
 }
 
-function addGuardHook(settings, commandArg) {
+// 전역은 $HOME이 펼쳐지도록 셸 형식, 프로젝트는 문서가 치환을 보장하는 \${CLAUDE_PROJECT_DIR}의 exec 형식.
+function addGuardHook(settings, global) {
+  const handler = global
+    ? { type: 'command', command: `node "$HOME/${GUARD_REL}"`, timeout: 10 }
+    : { type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/${GUARD_REL}`], timeout: 10 }
   settings.hooks ??= {}
   settings.hooks.PreToolUse ??= []
-  settings.hooks.PreToolUse.push({
-    matcher: MATCHER,
-    hooks: [{ type: 'command', command: 'node', args: [commandArg], timeout: 10 }],
-  })
+  settings.hooks.PreToolUse.push({ matcher: MATCHER, hooks: [handler] })
 }

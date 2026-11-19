@@ -39,11 +39,13 @@ function project({ withEslint = true, git = false } = {}) {
   return root
 }
 
+const EMPTY_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-guard-home-'))
+
 function runGuard(input, env = {}) {
   return spawnSync('node', [GUARD], {
     encoding: 'utf8',
     input: JSON.stringify(input),
-    env: { ...process.env, MY_FE_HARNESS_LINT_GUARD: '', ...env },
+    env: { ...process.env, HOME: EMPTY_HOME, MY_FE_HARNESS_LINT_GUARD: '', ...env },
   })
 }
 
@@ -116,4 +118,11 @@ test('lint-guard 설치 matcher와 플러그인 hooks.json matcher가 같다', a
   const plugin = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../hooks/hooks.json', import.meta.url)), 'utf8'))
   assert.equal(plugin.hooks.PostToolUse[0].matcher, LINT_MATCHER)
   assert.ok(plugin.hooks.Stop[0].hooks[0].args[0].endsWith('lint-guard.mjs'))
+})
+
+test('전역 사본이 있으면 프로젝트 사본은 양보한다', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-guard-home-'))
+  fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true })
+  fs.copyFileSync(GUARD, path.join(home, '.claude', 'hooks', 'lint-guard.mjs'))
+  assert.equal(runGuard(edit(project(), 'a.ts', 'BAD'), { HOME: home }).status, 0)
 })

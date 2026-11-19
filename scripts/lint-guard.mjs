@@ -8,13 +8,14 @@
 // - 문제 없으면 아무것도 출력하지 않고 통과(exit 0).
 // - ESLint가 없는 프로젝트, 설정 오류, 시간 초과, 내부 오류는 전부 통과(fail-open).
 // - Stop은 같은 세션에서 MAX_STOP_BLOCKS번까지만 막는다(무한 반복 방지).
-// - 끄려면 MY_FE_HARNESS_LINT_GUARD=off.
+// - 끄려면 MY_FE_HARNESS_LINT_GUARD=off. 전역(~/.claude/hooks) 사본이 있으면 프로젝트 사본은 아무것도 하지 않는다.
 // - 외부 의존성 0.
 
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const LINTABLE = /\.(?:[cm]?[jt]sx?)$/
 const ESLINT_TIMEOUT_MS = 90_000
@@ -24,6 +25,7 @@ const MAX_STOP_BLOCKS = 3
 const ESLINT_LINT_ERRORS = 1
 const BLOCK_EXIT = 2
 const ERROR_SEVERITY = 2
+const GLOBAL_COPY = path.join(os.homedir(), '.claude', 'hooks', 'lint-guard.mjs')
 
 try {
   run(JSON.parse(fs.readFileSync(0, 'utf8') || '{}'))
@@ -33,6 +35,7 @@ try {
 
 function run(input) {
   if (process.env.MY_FE_HARNESS_LINT_GUARD === 'off') return
+  if (isShadowedByGlobal()) return
   if (input.hook_event_name === 'Stop') return guardStop(input)
   return guardEdit(input)
 }
@@ -56,6 +59,12 @@ function guardStop(input) {
   if (count > MAX_STOP_BLOCKS) return fs.rmSync(counterFile, { force: true })
   fs.writeFileSync(counterFile, String(count))
   block(`끝내기 전에 이번 작업에서 바뀐 파일의 lint 에러를 0으로 만드세요(${count}/${MAX_STOP_BLOCKS}).\n${report}`)
+}
+
+// 전역 사본이 있으면 프로젝트·플러그인 사본은 양보한다(같은 파일을 두 번 검사하지 않게).
+function isShadowedByGlobal() {
+  const self = fileURLToPath(import.meta.url)
+  return path.resolve(self) !== path.resolve(GLOBAL_COPY) && fs.existsSync(GLOBAL_COPY)
 }
 
 // 위로 올라가며 node_modules/.bin/eslint가 있는 폴더를 찾는다.
