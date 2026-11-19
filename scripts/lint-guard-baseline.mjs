@@ -1,5 +1,7 @@
 // my-fe-harness 기본 잠금(바닥선). lint-guard가 어느 프로젝트에서든 그 프로젝트 ESLint 설정 "아래에" 깐다.
-// ESLint 기본 규칙만 써서 플러그인 없이 돌아가고, 프로젝트 설정이 뒤에 오므로 프로젝트가 필요한 곳을 명시적으로 끌 수 있다.
+// ESLint 기본 규칙과 의존성 없는 하네스 플러그인(lint-guard-plugin.mjs)만 쓰고, 프로젝트 설정이 뒤에 오므로 프로젝트가 필요한 곳을 명시적으로 끌 수 있다.
+
+import harness from './lint-guard-plugin.mjs'
 
 const MAX_COMPLEXITY = 10
 const MAX_DEPTH = 3
@@ -8,6 +10,9 @@ const MAX_COMPONENT_FILE_LINES = 250
 const ALLOWED_NUMBERS = [-1, 0, 1, 2, 100]
 const LENGTH_OPTIONS = { skipBlankLines: true, skipComments: true }
 const NUMBER_HOMES = ['**/config/**', '**/constants/**', '**/constants.*', '**/*.config.*']
+const COMPONENT_FILES = ['**/*.tsx', '**/*.jsx']
+const COMPONENT_BODY_RULES = { 'harness/component-body': 'error', 'harness/no-direct-effect': 'error' }
+const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']
 const COMPONENTS_AND_HOOKS = ['**/*.tsx', '**/*.jsx', '**/use[A-Z]*.{ts,js,mts,mjs}']
 const GENERATED_AND_VENDOR = [
@@ -47,8 +52,9 @@ export function harnessBaseline(projectConfigs) {
       },
     },
     { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
-    { files: ['**/*.tsx', '**/*.jsx'], rules: { 'max-lines': ['error', { max: MAX_COMPONENT_FILE_LINES, ...LENGTH_OPTIONS }] } },
+    { files: COMPONENT_FILES, plugins: { harness }, rules: COMPONENT_BODY_RULES },
+    { files: COMPONENT_FILES, rules: { 'max-lines': ['error', { max: MAX_COMPONENT_FILE_LINES, ...LENGTH_OPTIONS }] } },
     { files: NUMBER_HOMES, rules: magicNumbersOff },
-    { files: TESTS, rules: { ...magicNumbersOff, 'max-lines-per-function': 'off' } },
+    { files: TESTS, rules: { ...magicNumbersOff, ...COMPONENT_BODY_RULES_OFF, 'max-lines-per-function': 'off' } },
   ]
 }

@@ -9,6 +9,8 @@ const LINT_GUARD_SRC = fileURLToPath(new URL('../scripts/lint-guard.mjs', import
 const LINT_GUARD_REL = '.claude/hooks/lint-guard.mjs'
 const BASELINE_SRC = fileURLToPath(new URL('../scripts/lint-guard-baseline.mjs', import.meta.url))
 const BASELINE_REL = '.claude/hooks/lint-guard-baseline.mjs'
+const PLUGIN_SRC = fileURLToPath(new URL('../scripts/lint-guard-plugin.mjs', import.meta.url))
+const PLUGIN_REL = '.claude/hooks/lint-guard-plugin.mjs'
 export const LINT_GUARD_MARK = 'lint-guard.mjs'
 export const LINT_MATCHER = 'Write|Edit|MultiEdit'
 export const LINT_GUARD_EVENTS = ['PostToolUse', 'Stop', 'SubagentStop']
@@ -57,7 +59,7 @@ function applyLintHook(target, { force, global }, manifest) {
     scriptSha,
     mark: LINT_GUARD_MARK,
     events: LINT_GUARD_EVENTS,
-    companions: [{ rel: BASELINE_REL, sha: hashFile(path.join(base, BASELINE_REL)) }],
+    companions: [BASELINE_REL, PLUGIN_REL].map((rel) => ({ rel, sha: hashFile(path.join(base, rel)) })),
     ...(global ? { runtime: RUNTIME_REL } : {}),
   }
   manifest.lintHook.runtimeStatus = runtimeStatus
@@ -66,8 +68,10 @@ function applyLintHook(target, { force, global }, manifest) {
 function copyLintFiles(base, scriptDest, scriptExists, force) {
   fs.mkdirSync(path.dirname(scriptDest), { recursive: true })
   if (!scriptExists || force) fs.copyFileSync(LINT_GUARD_SRC, scriptDest)
-  const baselineDest = path.join(base, BASELINE_REL)
-  if (!fs.existsSync(baselineDest) || force) fs.copyFileSync(BASELINE_SRC, baselineDest)
+  for (const [src, rel] of [[BASELINE_SRC, BASELINE_REL], [PLUGIN_SRC, PLUGIN_REL]]) {
+    const dest = path.join(base, rel)
+    if (!fs.existsSync(dest) || force) fs.copyFileSync(src, dest)
+  }
 }
 
 function scriptStatusOf(exists, force) {
@@ -86,6 +90,7 @@ function installRuntime(base, force) {
   fs.writeFileSync(manifestFile, pkg)
   fs.copyFileSync(RUNTIME_CONFIG_SRC, path.join(dir, 'eslint.config.mjs'))
   fs.copyFileSync(BASELINE_SRC, path.join(dir, 'lint-guard-baseline.mjs'))
+  fs.copyFileSync(PLUGIN_SRC, path.join(dir, 'lint-guard-plugin.mjs'))
   if (isCurrent && !force && fs.existsSync(path.join(dir, 'node_modules', '.bin', 'eslint'))) return 'kept'
   const result = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], {
     cwd: dir,
