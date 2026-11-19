@@ -11,7 +11,11 @@ const ALLOWED_NUMBERS = [-1, 0, 1, 2, 100]
 const LENGTH_OPTIONS = { skipBlankLines: true, skipComments: true }
 const NUMBER_HOMES = ['**/config/**', '**/constants/**', '**/constants.*', '**/*.config.*']
 const COMPONENT_FILES = ['**/*.tsx', '**/*.jsx']
-const COMPONENT_BODY_RULES = { 'harness/component-body': 'error', 'harness/no-direct-effect': 'error' }
+const COMPONENT_BODY_RULES = {
+  'harness/component-body': 'error',
+  'harness/no-direct-effect': 'error',
+  'harness/no-store-passthrough': 'error',
+}
 const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']
 const COMPONENTS_AND_HOOKS = ['**/*.tsx', '**/*.jsx', '**/use[A-Z]*.{ts,js,mts,mjs}']

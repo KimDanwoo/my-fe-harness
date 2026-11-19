@@ -107,9 +107,115 @@ const noDirectEffect = {
   },
 }
 
+const STORE_HOOK = /^(?:useAtomValue|useAtom|useSelector|useStore|useContext|useSyncExternalStore|use[A-Z][A-Za-z0-9]*Store)$/
+const CUSTOM_HOOK = /^use[A-Z]/
+const LOCAL_REACT_HOOKS = new Set([
+  'useState', 'useReducer', 'useRef', 'useMemo', 'useCallback', 'useId', 'useTransition', 'useDeferredValue',
+  'useOptimistic', 'useActionState', 'useImperativeHandle', 'useEffect', 'useLayoutEffect', 'useInsertionEffect',
+  'useDebugValue', 'useFormStatus',
+])
+const DOMAIN_SOURCE = /^\.{1,2}\/|(?:^|[/@])(?:_?pages|views|features|entities|widgets|_?app)(?:\/|$)/
+
+const CONTEXT_COMPONENT = /(?:Context|Provider)$/
+
+const hookNameOf = (node) => (node?.type === 'CallExpression' ? calleeName(node.callee) ?? '' : '')
+const isStoreHook = (name) => STORE_HOOK.test(name)
+const isSubscribingHook = (name) => CUSTOM_HOOK.test(name) && !LOCAL_REACT_HOOKS.has(name)
+const isSubscriptionCall = (node) => {
+  const name = hookNameOf(node)
+  return isStoreHook(name) || (isSubscribingHook(name) && node.arguments.length === 0)
+}
+const childNodesOf = (value) => (Array.isArray(value) ? value : [value]).filter((item) => typeof item?.type === 'string')
+
+export function subscriptionsIn(node) {
+  if (typeof node?.type !== 'string' || isFunctionExpression(node)) return []
+  const own = isSubscriptionCall(node) ? [hookNameOf(node)] : []
+  const nested = Object.entries(node).flatMap(([key, value]) => (key === 'parent' ? [] : childNodesOf(value).flatMap(subscriptionsIn)))
+  return [...own, ...nested]
+}
+
+export const containsStoreCall = (node) => subscriptionsIn(node).some(isStoreHook)
+
+function jsxRootName(name) {
+  if (name.type === 'JSXMemberExpression') return jsxRootName(name.object)
+  return name.type === 'JSXIdentifier' ? name.name : null
+}
+
+function outermostMemberOf(identifier) {
+  let current = identifier
+  while (current.parent?.type === 'MemberExpression' && current.parent.object === current) current = current.parent
+  return current
+}
+
+function passedPropTarget(reference, component) {
+  if (reference.from.variableScope.block !== component) return null
+  const container = outermostMemberOf(reference.identifier).parent
+  if (container?.type !== 'JSXExpressionContainer' || container.parent?.type !== 'JSXAttribute') return null
+  return jsxRootName(container.parent.parent.name)
+}
+
+function importSourcesOf(program) {
+  const imports = program.body.filter((statement) => statement.type === 'ImportDeclaration')
+  return new Map(imports.flatMap((declaration) => declaration.specifiers.map((specifier) => [specifier.local.name, declaration.source.value])))
+}
+
+export function isDomainComponent(name, importSources) {
+  if (!COMPONENT_NAME.test(name ?? '') || CONTEXT_COMPONENT.test(name)) return false
+  const source = importSources.get(name)
+  return source === undefined || DOMAIN_SOURCE.test(source)
+}
+
+function passThroughTargets(variables, component, importSources) {
+  const reads = variables.flatMap((variable) => variable.references.filter((reference) => reference.isRead()))
+  if (reads.length === 0) return null
+  const targets = reads.map((reference) => passedPropTarget(reference, component))
+  return targets.every((target) => isDomainComponent(target, importSources)) ? [...new Set(targets)] : null
+}
+
+export function passThroughProblem({ hooks, targets }) {
+  if (!targets) return null
+  if (hooks.some(isStoreHook)) return 'storePassThrough'
+  if (hooks.some(isSubscribingHook) && targets.length === 1) return 'hookPassThrough'
+  return null
+}
+
+const hookDeclaratorsOf = (component) =>
+  bodyStatementsOf(component)
+    .filter((statement) => statement.type === 'VariableDeclaration')
+    .flatMap((statement) => statement.declarations)
+    .map((declarator) => ({ declarator, hooks: subscriptionsIn(declarator.init) }))
+    .filter(({ hooks }) => hooks.length > 0)
+
+const noStorePassthrough = {
+  meta: {
+    type: 'suggestion',
+    schema: [],
+    messages: {
+      storePassThrough: '{{hook}}: 이 컴포넌트는 store 값을 쓰지 않고 {{child}}에 넘기기만 한다. 값을 쓰는 자식에서 직접 구독한다.',
+      hookPassThrough: '{{hook}}(): 인자 없는 구독 훅 결과를 쓰지 않고 {{child}} 하나에만 넘긴다. {{child}}에서 직접 부른다.',
+    },
+  },
+  create(context) {
+    const sourceCode = context.sourceCode ?? context.getSourceCode()
+    return {
+      Program(program) {
+        const importSources = importSourcesOf(program)
+        for (const component of program.body.flatMap(componentFunctionsOf)) {
+          for (const { declarator, hooks } of hookDeclaratorsOf(component)) {
+            const targets = passThroughTargets(sourceCode.getDeclaredVariables(declarator), component, importSources)
+            const messageId = passThroughProblem({ hooks, targets })
+            if (messageId) context.report({ node: declarator, messageId, data: { hook: hooks[0], child: targets.join('·') } })
+          }
+        }
+      },
+    }
+  },
+}
+
 export default {
   rules: {
     'component-body': componentBody,
     'no-direct-effect': noDirectEffect,
+    'no-store-passthrough': noStorePassthrough,
   },
 }
