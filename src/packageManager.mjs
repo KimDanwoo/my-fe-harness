@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 export const PACKAGE_MANAGERS = {
@@ -22,6 +23,9 @@ const LOCKFILES = [
   ['package-lock.json', 'npm'],
 ]
 const DEFAULT_PACKAGE_MANAGER = 'pnpm'
+const FALLBACK_INSTALL_MANAGER = 'npm'
+const YARN_BERRY_MIN_MAJOR = 2
+const YARN_BERRY_CONFIG = '.yarnrc.yml'
 
 function ancestorsOf(startDir) {
   const dirs = []
@@ -34,7 +38,9 @@ function ancestorsOf(startDir) {
 }
 
 export function findGitRoot(startDir) {
-  return ancestorsOf(startDir).find((dir) => fs.existsSync(path.join(dir, '.git'))) ?? null
+  const home = os.homedir()
+  const isRepoRoot = (dir) => dir !== home && fs.existsSync(path.join(dir, '.git'))
+  return ancestorsOf(startDir).find(isRepoRoot) ?? null
 }
 
 export function projectBase(targetDir) {
@@ -56,8 +62,23 @@ function lockfileManager(dir) {
   return LOCKFILES.find(([name]) => fs.existsSync(path.join(dir, name)))?.[1] ?? null
 }
 
+const knownManager = (name) => (Object.hasOwn(PACKAGE_MANAGERS, name) ? name : null)
+const declaredManager = (pkg) => knownManager(String(pkg?.packageManager ?? '').split('@')[0])
+const lockedManager = (targetDir) => repoDirsOf(targetDir).map(lockfileManager).find(Boolean) ?? null
+const invokingManager = () => knownManager(String(process.env.npm_config_user_agent ?? '').split('/')[0])
+
+export const hasLockfile = (targetDir) => lockedManager(targetDir) !== null
+
 export function detectPackageManager(targetDir, pkg) {
-  const declared = String(pkg.packageManager ?? '').split('@')[0]
-  if (Object.hasOwn(PACKAGE_MANAGERS, declared)) return declared
-  return repoDirsOf(targetDir).map(lockfileManager).find(Boolean) ?? DEFAULT_PACKAGE_MANAGER
+  return declaredManager(pkg) ?? lockedManager(targetDir) ?? DEFAULT_PACKAGE_MANAGER
+}
+
+export function chooseInstallManager(targetDir, pkg) {
+  return declaredManager(pkg) ?? lockedManager(targetDir) ?? invokingManager() ?? FALLBACK_INSTALL_MANAGER
+}
+
+export function isYarnBerry(targetDir, pkg) {
+  const declared = /^yarn@(\d+)/.exec(String(pkg?.packageManager ?? ''))
+  if (declared) return Number(declared[1]) >= YARN_BERRY_MIN_MAJOR
+  return findInRepo(targetDir, YARN_BERRY_CONFIG) !== null
 }

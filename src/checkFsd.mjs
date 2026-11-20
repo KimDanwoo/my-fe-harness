@@ -6,10 +6,11 @@ import { findInRepo } from './packageManager.mjs'
 const ESLINT_BIN = 'node_modules/.bin/eslint'
 const SRC_DIR = 'src'
 const FSD_RULE_PREFIX = 'fsd/'
-const PROBE_EXT = new Set(['.ts', '.tsx'])
+const PROBE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'])
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage'])
 const MAX_BUFFER_BYTES = 256 * 1024 * 1024
 const RULE_OFF = new Set([0, 'off'])
+const TYPESCRIPT_EXT = new Set(['.ts', '.tsx'])
 
 function* sourceFiles(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -33,6 +34,11 @@ function parseJson(text) {
   }
 }
 
+function probeFile(srcDir) {
+  const files = [...sourceFiles(srcDir)]
+  return files.find((file) => TYPESCRIPT_EXT.has(path.extname(file))) ?? files[0]
+}
+
 const severityOf = (entry) => (Array.isArray(entry) ? entry[0] : entry)
 
 function hasFsdRules(eslint, probe, cwd) {
@@ -41,23 +47,30 @@ function hasFsdRules(eslint, probe, cwd) {
   return rules.some(([name, entry]) => name.startsWith(FSD_RULE_PREFIX) && !RULE_OFF.has(severityOf(entry)))
 }
 
-function fsdViolations(results, targetDir) {
-  return results.flatMap(({ filePath, messages }) =>
-    messages
-      .filter(({ ruleId }) => ruleId?.startsWith(FSD_RULE_PREFIX))
-      .map(({ ruleId, line, message }) => ({ file: path.relative(targetDir, filePath).split(path.sep).join('/'), line, rule: ruleId, message })),
-  )
+const toEntry = (targetDir, filePath) => ({ ruleId, line, message }) => ({ file: path.relative(targetDir, filePath).split(path.sep).join('/'), line, rule: ruleId, message })
+
+function messagesWhere(results, targetDir, predicate) {
+  return results.flatMap(({ filePath, messages }) => messages.filter(predicate).map(toEntry(targetDir, filePath)))
+}
+
+const isFsdMessage = ({ ruleId }) => ruleId?.startsWith(FSD_RULE_PREFIX) ?? false
+const isUnreadable = ({ fatal, ruleId }) => fatal === true || ruleId === null
+
+function describeUnreadable(entries) {
+  return entries.map(({ file, line, message }) => `${file}:${line}  ${message}`).join('\n')
 }
 
 export function checkFsdWithEslint(targetDir) {
   const srcDir = path.join(targetDir, SRC_DIR)
-  const probe = fs.existsSync(srcDir) ? sourceFiles(srcDir).next().value : undefined
+  const probe = fs.existsSync(srcDir) ? probeFile(srcDir) : undefined
   if (!probe) return { status: 'no-source', files: 0, violations: [] }
   const eslint = findInRepo(targetDir, ESLINT_BIN)
   if (!eslint) return { status: 'no-eslint', files: 0, violations: [] }
   if (!hasFsdRules(eslint, probe, targetDir)) return { status: 'no-fsd-rules', files: 0, violations: [] }
-  const result = runEslint(eslint, ['--format', 'json', '--no-warn-ignored', SRC_DIR], targetDir)
+  const result = runEslint(eslint, ['--format', 'json', '--no-warn-ignored', '.'], targetDir)
   const results = parseJson(result.stdout ?? '')
   if (!Array.isArray(results)) return { status: 'eslint-failed', files: 0, violations: [], detail: (result.stderr ?? '').trim() }
-  return { status: 'ok', files: results.length, violations: fsdViolations(results, targetDir) }
+  const unreadable = messagesWhere(results, targetDir, isUnreadable)
+  if (unreadable.length > 0) return { status: 'unreadable', files: results.length, violations: [], detail: describeUnreadable(unreadable) }
+  return { status: 'ok', files: results.length, violations: messagesWhere(results, targetDir, isFsdMessage) }
 }

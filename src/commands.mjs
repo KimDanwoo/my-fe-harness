@@ -14,6 +14,7 @@ import { uninstall } from './uninstall.mjs'
 import { checkStructure, installedStructure } from './check.mjs'
 import { checkFsdWithEslint } from './checkFsd.mjs'
 import { installProjectSetup, projectFileStatuses } from './installProjectSetup.mjs'
+import { readPackageJson } from './installPackageSetup.mjs'
 import { printFsdCheck, printProjectSetup } from './printProjectSetup.mjs'
 import { scaffoldStructure } from './scaffold.mjs'
 import { detectFrameworks } from './detect.mjs'
@@ -40,6 +41,7 @@ function withManifest(options, fn) {
 }
 
 export async function runInit(options) {
+  if (!options.global) readPackageJson(options.targetDir)
   const detected = detectFrameworks(options.targetDir)
   if (detected.length > 0) {
     console.log(`\n감지된 프레임워크: ${detected.join(', ')} → 권장 "core ${detected.join(' ')}"`)

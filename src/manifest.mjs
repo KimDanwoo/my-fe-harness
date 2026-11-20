@@ -65,6 +65,11 @@ function agentsRecord(value) {
   return { file: typeof value.file === 'string' ? value.file : null, sha: value.sha, created: value.created === true }
 }
 
+function packageRecord(packageJson) {
+  const createdSections = Array.isArray(packageJson.createdSections) ? packageJson.createdSections.filter((section) => typeof section === 'string') : []
+  return { file: packageJson.file, devDependencies: plainObject(packageJson.devDependencies), scripts: plainObject(packageJson.scripts), createdSections }
+}
+
 function projectRecord(value) {
   const isRecord = Boolean(value) && typeof value === 'object'
   if (!isRecord) return null
@@ -72,7 +77,7 @@ function projectRecord(value) {
   const isPackageRecord = typeof packageJson?.file === 'string'
   return {
     files: plainObject(value.files),
-    packageJson: isPackageRecord ? { file: packageJson.file, devDependencies: plainObject(packageJson.devDependencies), scripts: plainObject(packageJson.scripts) } : null,
+    packageJson: isPackageRecord ? packageRecord(packageJson) : null,
   }
 }
 

@@ -16,12 +16,20 @@ const CI_ICONS = { created: '✔', overwritten: '↻', kept: '↷', covered: '�
 
 const indent = (text) => text.trimEnd().split('\n').map((line) => `${INDENT}${line}`).join('\n')
 
+const EXAMPLE_INTROS = {
+  kept: [
+    '이 설정은 my-fe-harness/eslint를 직접 가져오지 않습니다. 공유 설정 패키지로 이미 쓰고 있으면 그대로 두고,',
+    '아니면 아래 예시처럼 합쳐야 편집기·CI가 훅과 같은 규칙을 씁니다.',
+  ],
+  legacy: ['flat config로 옮긴 뒤 아래 예시를 eslint.config.mjs로 쓰면 편집기·CI가 훅과 같은 규칙을 씁니다.'],
+  outdated: ['ESLint 9 이상으로 올린 뒤 아래 예시를 eslint.config.mjs로 쓰면 편집기·CI가 훅과 같은 규칙을 씁니다.'],
+}
+
 function printEslint(eslint) {
   console.log(ESLINT_LINES[eslint.status](eslint))
   const shouldShowExample = !eslint.usesHarness
   if (!shouldShowExample) return
-  console.log('\n    이 설정은 my-fe-harness/eslint를 직접 가져오지 않습니다. 공유 설정 패키지로 이미 쓰고 있으면 그대로 두고,')
-  console.log('    아니면 아래 예시처럼 합쳐야 편집기·CI가 훅과 같은 규칙을 씁니다.\n')
+  console.log(`\n${EXAMPLE_INTROS[eslint.status].map((line) => `    ${line}`).join('\n')}\n`)
   console.log(`${indent(eslint.content)}\n`)
 }
 
@@ -65,17 +73,23 @@ export function printProjectSetup(result, { dryRun }) {
   printPackage(result.additions)
   printInstall(result.installStatus, result.packageManager)
   console.log(`  ${CI_ICONS[result.ci.status]} ${result.ci.file.padEnd(FILE_WIDTH)} ${CI_LABELS[result.ci.status]}`)
+  if (!result.ci.isLocked) console.log('    lockfile이 없어 CI가 lockfile 고정·캐시 없이 설치합니다. 설치로 생긴 lockfile을 커밋하고 workflow의 설치 명령을 고정 설치로 바꾸세요.')
   if (result.eslint.usesHarness) console.log('\n  → 훅(Claude가 고친 파일)·편집기·lint 스크립트·CI가 같은 하네스 규칙으로 검사합니다.')
 }
 
 const FSD_CHECK_PROBLEMS = {
-  'no-source': '  검사할 소스가 없습니다 (src/ 아래 .ts·.tsx 없음).',
+  'no-source': '  검사할 소스가 없습니다 (src/ 아래 코드 파일 없음).',
   'no-eslint': '  ✖ ESLint가 없습니다 — `my-fe-harness init`으로 eslint.config.mjs·의존성을 깔거나 ESLint를 설치하세요.',
   'no-fsd-rules': '  ✖ ESLint 설정에 fsd 규칙이 없습니다 — eslint.config에 my-fe-harness/eslint의 fsd()를 넣으세요(README의 "FSD 구조 잠금").',
 }
 
+const FSD_CHECK_DETAIL_TITLES = {
+  unreadable: '  ✖ ESLint가 읽지 못한 파일이 있어 fsd 규칙을 확인하지 못했습니다(문법 오류 등):',
+  'eslint-failed': '  ✖ ESLint 실행 실패',
+}
+
 function printFsdProblem(result) {
-  const message = FSD_CHECK_PROBLEMS[result.status] ?? `  ✖ ESLint 실행 실패\n${indent(result.detail || '(출력 없음)')}`
+  const message = FSD_CHECK_PROBLEMS[result.status] ?? `${FSD_CHECK_DETAIL_TITLES[result.status]}\n${indent(result.detail || '(출력 없음)')}`
   console.log(message)
   const isFailure = result.status !== 'no-source'
   if (isFailure) process.exitCode = 1

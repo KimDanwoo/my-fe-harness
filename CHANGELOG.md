@@ -16,14 +16,15 @@
   - 옛 `.eslintrc*`·ESLint 8 이하면 설정을 만들지 않고 안내한다. JS 프로젝트는 TS 없는 설정을 깐다.
   - Next·jotai·`src/_app`·`src/_pages`를 감지해 `fsd()` 옵션을 채운다. 생성 설정은 `.claude/`(하네스 훅 사본)와 빌드 산출물을 무시한다.
   - 이미 `lint`·`eslint`를 돌리는 workflow가 있으면 `harness.yml`을 만들지 않는다(CI 중복 방지).
-  - 모노레포 하위 앱은 lockfile을 git 루트까지 찾아 매니저를 정하고, workflow를 git 루트에 두고 `working-directory`로 그 앱에서 돌린다.
+  - 모노레포 하위 앱은 lockfile을 git 루트까지 찾아 매니저를 정하고, workflow를 git 루트에 앱별 이름(`harness-apps-web.yml`)으로 두고 `working-directory`로 그 앱에서 돌린다.
+  - lockfile이 없으면 실행한 매니저(npx·pnpm dlx 등)를, 그것도 없으면 npm을 쓰고 CI는 고정 설치·캐시 없이 설치한다. yarn Berry는 `--immutable`과 corepack을 쓴다. workflow 권한은 `contents: read`로 둔다.
   - 깐 파일과 `package.json`에 추가한 키는 매니페스트(`project`)에 기록한다. `status`가 보여주고, `uninstall`은 하네스가 쓴 그대로인 파일·값만 걷어낸다.
 - **`init --yes`·`--no-install`** — 묻지 않고 감지한 권장 팩으로 진행(구조는 `--structure`·`--fsd`로만), 의존성 설치 생략(설치 명령을 안내).
 
 ### Changed
 
 - **FSD `check`는 프로젝트 ESLint의 `fsd/*` 결과를 보여준다** — 정규식으로 FSD 의존 방향을 따로 판정하던 사본을 없앴다. 레이어 이름·`srcDir`·별칭이 편집기·CI와 같게 적용된다.
-  ESLint가 없거나 설정에 `fsd` 규칙이 없으면 종료 코드 1로 실패하고 `init`을 안내한다. 검사 대상은 `src/`의 ESLint 대상 파일이다(`.js`·`.vue`·`require()`는 `fsd()`가 보지 않는다).
+  ESLint가 없거나 설정에 `fsd` 규칙이 없거나 ESLint가 읽지 못한 파일(문법 오류)이 있으면 종료 코드 1로 실패한다. 프로젝트 전체를 돌려 `fsd/*`만 보여주므로 Next 루트 `app/`의 공개 API 위반도 잡는다(`.vue`·`require()`는 `fsd()`가 보지 않는다).
   feature-based·layered는 대응 ESLint 규칙이 없어 기존 import 스캔을 그대로 쓴다.
 - `verify-skill`의 패키지 매니저 감지도 lockfile을 git 루트까지 올라가며 찾는다(모노레포 하위 앱).
 

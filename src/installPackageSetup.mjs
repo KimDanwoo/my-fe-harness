@@ -14,18 +14,19 @@ const TYPECHECK_SCRIPTS = ['typecheck', 'type-check']
 const INSTALL_TIMEOUT_MS = 300_000
 const DEFAULT_INDENT = 2
 const PACKAGE_SECTIONS = ['devDependencies', 'scripts']
+const BYTE_ORDER_MARK = /^\uFEFF/
 
 export function readPackageJson(targetDir) {
   const file = path.join(targetDir, 'package.json')
   if (!fs.existsSync(file)) return null
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'))
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(BYTE_ORDER_MARK, ''))
   } catch {
     throw new Error(`${file} 파싱 실패 — 유효한 JSON이 아닙니다.`)
   }
 }
 
-export const allDeps = (pkg) => ({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies })
+export const allDeps = (pkg) => ({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies, ...pkg.optionalDependencies })
 
 const missing = (present, entries) => Object.fromEntries(entries.filter(([name]) => !(name in present)))
 
@@ -34,14 +35,15 @@ function plannedDevDependencies(pkg, { isTypeScript, needsHarnessDeps }) {
   return missing(allDeps(pkg), [
     [HARNESS_PACKAGE, HARNESS_SPEC],
     ['eslint', `^${RUNTIME_PACKAGES.eslint}`],
-    ...(isTypeScript ? [['typescript-eslint', `^${RUNTIME_PACKAGES['typescript-eslint']}`]] : []),
+    ...(isTypeScript ? [['typescript-eslint', `^${RUNTIME_PACKAGES['typescript-eslint']}`], ['typescript', `^${RUNTIME_PACKAGES.typescript}`]] : []),
   ])
 }
 
-function plannedScripts(pkg, { isTypeScript }) {
+function plannedScripts(pkg, { isTypeScript, devDependencies }) {
   const scripts = pkg.scripts ?? {}
   const hasTypecheck = TYPECHECK_SCRIPTS.some((name) => name in scripts)
-  const shouldAddTypecheck = isTypeScript && !hasTypecheck
+  const hasTypescript = 'typescript' in allDeps(pkg) || 'typescript' in devDependencies
+  const shouldAddTypecheck = isTypeScript && hasTypescript && !hasTypecheck
   return missing(scripts, [['lint', LINT_SCRIPT], ...(shouldAddTypecheck ? [['typecheck', TYPECHECK_SCRIPT]] : [])])
 }
 
@@ -51,7 +53,7 @@ function indentOf(source) {
 }
 
 function writePackageSections(file, additions) {
-  const source = fs.readFileSync(file, 'utf8')
+  const source = fs.readFileSync(file, 'utf8').replace(BYTE_ORDER_MARK, '')
   const pkg = JSON.parse(source)
   for (const section of PACKAGE_SECTIONS) {
     const hasAdditions = Object.keys(additions[section]).length > 0
@@ -61,20 +63,35 @@ function writePackageSections(file, additions) {
 }
 
 export function setupPackageJson({ targetDir, pkg, isTypeScript, needsHarnessDeps, dryRun }) {
-  const additions = {
-    devDependencies: plannedDevDependencies(pkg, { isTypeScript, needsHarnessDeps }),
-    scripts: plannedScripts(pkg, { isTypeScript }),
-  }
+  const devDependencies = plannedDevDependencies(pkg, { isTypeScript, needsHarnessDeps })
+  const additions = { devDependencies, scripts: plannedScripts(pkg, { isTypeScript, devDependencies }) }
+  const createdSections = PACKAGE_SECTIONS.filter((section) => Object.keys(additions[section]).length > 0 && !pkg[section])
   const hasChanges = PACKAGE_SECTIONS.some((section) => Object.keys(additions[section]).length > 0)
   const shouldWrite = hasChanges && !dryRun
   if (shouldWrite) writePackageSections(path.join(targetDir, 'package.json'), additions)
-  return additions
+  return { ...additions, createdSections }
+}
+
+function parsePackage(source) {
+  try {
+    return JSON.parse(source)
+  } catch {
+    return null
+  }
+}
+
+function dropEmptySections(pkg, sections) {
+  for (const section of sections) {
+    const isEmpty = Object.keys(pkg[section] ?? {}).length === 0
+    if (isEmpty) delete pkg[section]
+  }
 }
 
 export function removePackageAdditions(file, recorded, dryRun) {
   if (!fs.existsSync(file)) return 'missing'
-  const source = fs.readFileSync(file, 'utf8')
-  const pkg = JSON.parse(source)
+  const source = fs.readFileSync(file, 'utf8').replace(BYTE_ORDER_MARK, '')
+  const pkg = parsePackage(source)
+  if (!pkg) return 'parse-error'
   const removed = PACKAGE_SECTIONS.flatMap((section) =>
     Object.entries(recorded[section] ?? {})
       .filter(([name, value]) => pkg[section]?.[name] === value)
@@ -82,6 +99,7 @@ export function removePackageAdditions(file, recorded, dryRun) {
   )
   if (removed.length === 0) return 'not-present'
   for (const [section, name] of removed) delete pkg[section][name]
+  dropEmptySections(pkg, recorded.createdSections ?? [])
   if (!dryRun) writeFileAtomic(file, `${JSON.stringify(pkg, null, indentOf(source))}\n`)
   return 'removed'
 }

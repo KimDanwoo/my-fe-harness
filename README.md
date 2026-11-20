@@ -337,7 +337,8 @@ npx github:KimDanwoo/my-fe-harness check
 ```
 
 - **FSD는 규칙이 한 곳에만 있다.** `check`가 따로 판정하지 않고 프로젝트 ESLint(`eslint.config`의 `fsd()`)를 돌려 `fsd/*` 결과만 보여준다.
-  레이어 이름(`layers`)·`srcDir`·별칭이 편집기·CI와 똑같이 적용된다. ESLint가 없거나 설정에 `fsd` 규칙이 없으면 **실패(종료 코드 1)**하고 `init`을 안내한다 — 조용히 통과시키지 않는다.
+  레이어 이름(`layers`)·`srcDir`·별칭이 편집기·CI와 똑같이 적용되고, 프로젝트 전체를 돌리므로 Next 루트 `app/`의 공개 API 위반도 잡는다.
+  ESLint가 없거나, 설정에 `fsd` 규칙이 없거나, ESLint가 읽지 못한 파일(문법 오류)이 있으면 **실패(종료 코드 1)**한다 — 조용히 통과시키지 않는다.
 - **feature-based·layered**는 대응하는 ESLint 규칙이 없어 하네스가 import를 직접 스캔한다. 아래→위 import, 옆 슬라이스 직접 참조, 배럴 우회 deep import 셋만 판정하고,
   `tsconfig`/`jsconfig`의 path alias를 그대로 해석한다. 상대경로·외부 패키지·슬라이스 없는 레이어 내부 경로는 위반이 아니다(오탐 방지).
 - **볼 곳을 좁혀줄 뿐 자동 수정하지 않는다.** 위반이 있으면 **종료 코드 1** — CI에 그대로 걸 수 있다.
@@ -416,11 +417,13 @@ npx github:KimDanwoo/my-fe-harness init --yes --fsd
 | 3 | `eslint.config.mjs` — `quality()` + (FSD 구조면) `fsd()`. Next·jotai·`src/_app`·`src/_pages`를 감지해 옵션을 채우고, `.claude/`·빌드 산출물은 무시한다 |
 | 4 | `package.json` — 없을 때만 `my-fe-harness`(`#v<지금 버전>` 고정)·`eslint`·`typescript-eslint`(TS일 때), `lint`·`typecheck` 스크립트 |
 | 5 | 의존성 설치 — lockfile로 감지한 매니저(pnpm·npm·yarn·bun)로 설치. `--no-install`이면 건너뛰고 설치 명령을 안내한다 |
-| 6 | `.github/workflows/harness.yml` — PR·main 푸시에 설치 → `lint` → `typecheck`(스크립트가 있을 때) |
+| 6 | `.github/workflows/harness.yml` — PR·main 푸시에 설치 → `lint` → `typecheck`(스크립트가 있을 때). 권한은 `contents: read` |
 
 - **이미 ESLint 설정이 있으면** 그대로 두고, `my-fe-harness/eslint`를 쓰지 않으면 합칠 예시를 출력한다. 하네스 의존성도 추가하지 않는다.
 - **옛 `.eslintrc*`나 ESLint 8 이하면** 설정을 만들지 않고 flat config(ESLint 9 이상)로 옮기라고 안내한다.
-- **모노레포 하위 앱**에서 돌리면 lockfile을 git 루트까지 올라가며 찾고, workflow는 git 루트에 두고 `working-directory`를 그 앱으로 잡는다. `.nvmrc`·`.node-version`이 있으면 그 Node 버전을 쓴다.
+- **모노레포 하위 앱**에서 돌리면 lockfile을 git 루트까지 올라가며 찾고, workflow는 git 루트에 앱별 이름(`harness-apps-web.yml`)으로 두고 `working-directory`를 그 앱으로 잡는다. `.nvmrc`·`.node-version`이 있으면 그 Node 버전을 쓴다.
+- **lockfile이 없으면** 실행한 매니저(npx·pnpm dlx 등)를, 그것도 없으면 npm을 쓰고, CI는 고정 설치·캐시 없이 설치한다. yarn Berry는 `--immutable`과 corepack을 쓴다.
+- `package.json`이 깨져 있으면 아무것도 쓰기 전에 멈춘다.
 - 이미 `lint`·`eslint`를 돌리는 workflow가 있으면 `harness.yml`을 만들지 않는다(CI 중복 방지).
 - `--global`이면 프로젝트 lint·CI 설정은 건너뛴다(프로젝트 전용).
 

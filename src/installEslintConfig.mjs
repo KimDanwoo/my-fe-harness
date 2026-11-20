@@ -70,22 +70,23 @@ function eslintMajor(deps) {
   return match ? Number(match[0]) : null
 }
 
-function blockedReason(targetDir, deps) {
+function blockedReason(targetDir, deps, pkg) {
   const legacy = existingIn(targetDir, LEGACY_CONFIG_NAMES)
   if (legacy) return { status: 'legacy', file: legacy }
+  if (pkg.eslintConfig) return { status: 'legacy', file: 'package.json#eslintConfig' }
   const major = eslintMajor(deps)
   const isOutdated = major !== null && major < FLAT_CONFIG_MIN_MAJOR
   return isOutdated ? { status: 'outdated', file: null } : null
 }
 
-export function installEslintConfig({ targetDir, deps, isTypeScript, fsdOptions, dryRun }) {
+export function installEslintConfig({ targetDir, pkg, deps, isTypeScript, fsdOptions, dryRun }) {
   const content = renderEslintConfig({ isTypeScript, fsdOptions })
   const existing = existingIn(targetDir, FLAT_CONFIG_NAMES)
   if (existing) {
     const usesHarness = fs.readFileSync(path.join(targetDir, existing), 'utf8').includes(HARNESS_IMPORT)
     return { status: 'kept', file: existing, usesHarness, content }
   }
-  const blocked = blockedReason(targetDir, deps)
+  const blocked = blockedReason(targetDir, deps, pkg)
   if (blocked) return { ...blocked, usesHarness: false, content }
   const status = writeOne(path.join(targetDir, ESLINT_CONFIG_FILE), content, { force: false, dryRun })
   return { status, file: ESLINT_CONFIG_FILE, usesHarness: true, content }

@@ -4,10 +4,11 @@ import { installCi } from './installCi.mjs'
 import { fsdOptionsFor, installEslintConfig } from './installEslintConfig.mjs'
 import { allDeps, installDependencies, readPackageJson, removePackageAdditions, setupPackageJson } from './installPackageSetup.mjs'
 import { hashFile, isInside } from './manifest.mjs'
-import { detectPackageManager, projectBase } from './packageManager.mjs'
+import { chooseInstallManager, projectBase } from './packageManager.mjs'
 
 const TSCONFIG_FILES = ['tsconfig.json']
 const WRITTEN = new Set(['created', 'overwritten'])
+const PRUNABLE_DIRS = ['.github/workflows', '.github']
 
 const toKey = (base, file) => path.relative(base, file).split(path.sep).join('/')
 
@@ -25,13 +26,14 @@ function writtenFiles(base, steps) {
 
 function recordProject(manifest, { base, targetDir, steps, additions }) {
   const previous = manifest.project ?? { files: {}, packageJson: null }
-  const previousPackage = previous.packageJson ?? { devDependencies: {}, scripts: {} }
+  const previousPackage = previous.packageJson ?? { devDependencies: {}, scripts: {}, createdSections: [] }
   manifest.project = {
     files: { ...previous.files, ...writtenFiles(base, steps) },
     packageJson: {
       file: toKey(base, path.join(targetDir, 'package.json')),
       devDependencies: { ...previousPackage.devDependencies, ...additions.devDependencies },
       scripts: { ...previousPackage.scripts, ...additions.scripts },
+      createdSections: [...new Set([...previousPackage.createdSections, ...additions.createdSections])],
     },
   }
 }
@@ -46,11 +48,11 @@ export function installProjectSetup(options, manifest, { hasFsd }) {
   const isTypeScript = isTypeScriptProject(targetDir, deps)
   const shouldUseFsd = hasFsd && isTypeScript
   const fsdOptions = shouldUseFsd ? fsdOptionsFor(targetDir, deps) : null
-  const eslint = installEslintConfig({ targetDir, deps, isTypeScript, fsdOptions, dryRun })
+  const eslint = installEslintConfig({ targetDir, pkg, deps, isTypeScript, fsdOptions, dryRun })
   const additions = setupPackageJson({ targetDir, pkg, isTypeScript, needsHarnessDeps: eslint.status === 'created', dryRun })
-  const packageManager = detectPackageManager(targetDir, pkg)
+  const packageManager = chooseInstallManager(targetDir, pkg)
   const installStatus = installDependencies({ targetDir, packageManager, devDependencies: additions.devDependencies, install, dryRun })
-  const ci = installCi({ base, targetDir, packageManager, scripts: { ...pkg.scripts, ...additions.scripts }, dryRun })
+  const ci = installCi({ base, targetDir, packageManager, pkg, scripts: { ...pkg.scripts, ...additions.scripts }, dryRun })
   const steps = [
     { status: eslint.status, abs: path.join(targetDir, eslint.file ?? '') },
     { status: ci.status, abs: path.join(base, ci.file) },
@@ -68,6 +70,14 @@ function removeProjectFile(base, key, recordedSha, dryRun) {
   return { file: key, status: 'removed' }
 }
 
+function pruneEmptyDirs(base) {
+  for (const rel of PRUNABLE_DIRS) {
+    const dir = path.join(base, rel)
+    const isEmptyDir = fs.existsSync(dir) && fs.readdirSync(dir).length === 0
+    if (isEmptyDir) fs.rmdirSync(dir)
+  }
+}
+
 function removePackageRecord(base, packageJson, dryRun) {
   if (!packageJson) return null
   const file = path.join(base, packageJson.file)
@@ -78,6 +88,7 @@ function removePackageRecord(base, packageJson, dryRun) {
 export function removeProjectSetup(targetDir, project, dryRun) {
   const base = projectBase(targetDir)
   const files = Object.entries(project.files).map(([key, sha]) => removeProjectFile(base, key, sha, dryRun))
+  if (!dryRun) pruneEmptyDirs(base)
   const packageJson = removePackageRecord(base, project.packageJson, dryRun)
   return { files, packageJson }
 }
