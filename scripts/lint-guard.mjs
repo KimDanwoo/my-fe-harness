@@ -44,6 +44,8 @@ const ESLINT_CONFIG_ERROR = 2
 const RUNTIME_DIR = process.env.MY_FE_HARNESS_RUNTIME_DIR || path.join(os.homedir(), '.claude', 'my-fe-harness-runtime')
 const RUNTIME_CONFIG = path.join(RUNTIME_DIR, 'eslint.config.mjs')
 const PROJECT_MARKERS = ['package.json', '.git']
+const SUPPRESSIONS_FILE = 'eslint-suppressions.json'
+const EMPTY_SUPPRESSIONS = path.join(LEDGER_ROOT, 'empty-suppressions.json')
 
 try {
   run(JSON.parse(fs.readFileSync(0, 'utf8') || '{}'))
@@ -181,12 +183,28 @@ function firstLoadableRun(linter, files) {
 }
 
 function runEslint(linter, files, extraArgs) {
-  return spawnSync(linter.bin, [...extraArgs, '--fix', '--format', 'json', '--no-warn-ignored', ...files], {
+  const args = [...extraArgs, ...suppressionArgs(linter.root), '--fix', '--format', 'json', '--no-warn-ignored', ...files]
+  return spawnSync(linter.bin, args, {
     cwd: linter.root,
     encoding: 'utf8',
     timeout: ESLINT_TIMEOUT_MS,
     maxBuffer: MAX_BUFFER,
   })
+}
+
+// 프로젝트의 ESLint 일괄 억제(eslint-suppressions.json)는 CI에서 기존 부채를 묶어 두는 장치라, 그대로 두면 손댄 파일의 부채를 훅이 못 본다.
+// 빈 억제 파일로 바꿔 끼워 손댄 파일은 부채까지 고치게 한다. 억제 파일이 있는 프로젝트(= 이 옵션을 아는 ESLint)에만 넘긴다.
+function suppressionArgs(root) {
+  if (!fs.existsSync(path.join(root, SUPPRESSIONS_FILE))) return []
+  if (!fs.existsSync(EMPTY_SUPPRESSIONS)) writeAtomically(EMPTY_SUPPRESSIONS, '{}')
+  return ['--suppressions-location', EMPTY_SUPPRESSIONS]
+}
+
+function writeAtomically(file, content) {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const temporary = `${file}.${process.pid}`
+  fs.writeFileSync(temporary, content)
+  fs.renameSync(temporary, file)
 }
 
 // 프로젝트 설정을 불러와 그 앞에 하네스 기본 잠금을 까는 설정 파일을 만든다. --config로 넘기면 패턴은 cwd(프로젝트 루트) 기준이다.

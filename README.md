@@ -221,6 +221,7 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 - **fail-open** — `node_modules/.bin/eslint`가 없는 프로젝트, ESLint 설정 오류, 시간 초과는 전부 통과.
 - **잠금 자체는 프로젝트 ESLint에 있다** — 이 훅은 그 결과를 Claude에게 즉시 돌려주는 통로다. 어떤 규칙을 켤지는 프로젝트가 정한다.
 - 기존 lint 에러가 많은 프로젝트에서는 파일을 건드릴 때마다 그 파일의 에러를 같이 고치게 된다. 그래서 npx 설치는 프로젝트별 선택(opt-in)이다.
+- 프로젝트가 ESLint 일괄 억제(`eslint-suppressions.json`)로 기존 부채를 묶어 두었어도, 훅은 빈 억제 파일(`--suppressions-location`)로 검사한다. 억제는 CI가 새 부채를 막는 장치이고, 손댄 파일은 부채까지 고친다.
 - **어느 프로젝트에서든**: 프로젝트 ESLint가 있으면 그 설정 아래에 하네스 기본 잠금(`lint-guard-baseline.mjs` — 중첩 삼항·복잡도·깊이·
   길이·매직넘버·인라인 끄기 금지·컴포넌트 본문 규칙)을 깔고, 없으면 `--global` 설치 때 받은 런타임(`~/.claude/my-fe-harness-runtime`)으로 기본 잠금만 검사한다.
 - **컴포넌트 본문 규칙**(`lint-guard-plugin.mjs`, 의존성 0인 ESLint 플러그인 `harness`) — `*.tsx`·`*.jsx`의 최상위 컴포넌트(memo·forwardRef 포함)에서
