@@ -20,7 +20,7 @@ const COMPONENT_BODY_RULES = {
 }
 const ALIAS_IMPORT_FILES = ['**/*.{js,jsx,ts,tsx}']
 const ALIAS_IMPORT_EXEMPT = ['**/*.config.*', '**/*.d.ts']
-const COMPONENT_BODY_RULES_OFF =Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
+const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']
 const COMPONENTS_AND_HOOKS = ['**/*.tsx', '**/*.jsx', '**/use[A-Z]*.{ts,js,mts,mjs}']
 const GENERATED_AND_VENDOR = [
@@ -31,6 +31,8 @@ const GENERATED_AND_VENDOR = [
   '**/.turbo/**',
   '**/generated/**',
 ]
+
+const HARNESS_PREFIX = 'harness/'
 
 const usesTypeScriptPlugin = (configs) => configs.some((config) => config?.plugins?.['@typescript-eslint'])
 
@@ -45,7 +47,16 @@ function magicNumbersRule(configs) {
   }
 }
 
-export function harnessBaseline(projectConfigs) {
+const registeredHarness = (configs) => configs.find((config) => config?.plugins?.harness)?.plugins.harness
+
+// 프로젝트가 고정한 하네스 버전의 플러그인을 재사용할 때, 그 버전에 없는 규칙을 켜면 ESLint 설정 에러로 훅이 잠금 전체를 건너뛴다.
+const rulesIn = (plugin, rules) =>
+  Object.fromEntries(Object.entries(rules).filter(([name]) => !name.startsWith(HARNESS_PREFIX) || plugin.rules?.[name.slice(HARNESS_PREFIX.length)]))
+
+export function harnessBaseline(configs = []) {
+  const projectConfigs = configs.flat(Infinity)
+  const plugin = registeredHarness(projectConfigs) ?? harness
+  const harnessRules = (rules) => rulesIn(plugin, rules)
   const magicNumbers = magicNumbersRule(projectConfigs)
   const magicNumbersOff = Object.fromEntries(Object.keys(magicNumbers).map((rule) => [rule, 'off']))
   return [
@@ -60,10 +71,15 @@ export function harnessBaseline(projectConfigs) {
       },
     },
     { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
-    { files: COMPONENT_FILES, plugins: { harness }, rules: COMPONENT_BODY_RULES },
-    { files: ALIAS_IMPORT_FILES, ignores: ALIAS_IMPORT_EXEMPT, plugins: { harness }, rules: { 'harness/no-relative-import': 'error' } },
+    { files: COMPONENT_FILES, plugins: { harness: plugin }, rules: harnessRules(COMPONENT_BODY_RULES) },
+    {
+      files: ALIAS_IMPORT_FILES,
+      ignores: ALIAS_IMPORT_EXEMPT,
+      plugins: { harness: plugin },
+      rules: harnessRules({ 'harness/no-relative-import': 'error' }),
+    },
     { files: COMPONENT_FILES, rules: { 'max-lines': ['error', { max: MAX_COMPONENT_FILE_LINES, ...LENGTH_OPTIONS }] } },
     { files: NUMBER_HOMES, rules: magicNumbersOff },
-    { files: TESTS, rules: { ...magicNumbersOff, ...COMPONENT_BODY_RULES_OFF, 'max-lines-per-function': 'off' } },
+    { files: TESTS, rules: harnessRules({ ...magicNumbersOff, ...COMPONENT_BODY_RULES_OFF, 'max-lines-per-function': 'off' }) },
   ]
 }

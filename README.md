@@ -242,6 +242,27 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 npx github:KimDanwoo/my-fe-harness lint-guard
 ```
 
+#### 프로젝트 lint·CI에서 같은 규칙 쓰기 — `my-fe-harness/eslint`
+
+훅은 Claude가 고친 파일만 본다. 사람이 쓴 코드와 CI도 같은 기준을 받으려면 프로젝트 ESLint 설정이 하네스를 직접 가져다 쓴다.
+규칙을 복사해 두지 않으므로 하네스를 올리면 프로젝트 규칙도 같이 바뀐다.
+
+```js
+// eslint.config.mjs — devDependencies에 "my-fe-harness": "github:KimDanwoo/my-fe-harness#<태그>"
+import { quality } from 'my-fe-harness/eslint'
+
+const projectConfigs = [/* 프로젝트 설정(파서·프레임워크 프리셋 등) */]
+export default [...quality(projectConfigs), ...projectConfigs]
+```
+
+- `quality(projectConfigs)`는 훅의 기본 잠금과 같은 설정 배열이다. 프로젝트 설정을 넘기면 `@typescript-eslint` 사용 여부를 보고 매직넘버 규칙을 고른다.
+- `plugin`은 `harness` 플러그인 객체다. 프로젝트가 `plugins: { harness: plugin }`으로 규칙을 직접 켤 수 있다.
+- 프로젝트가 `harness` 플러그인을 이미 등록했으면 기본 잠금(훅의 덧씌움 포함)은 그 객체를 재사용한다. ESLint는 같은 이름에 다른 플러그인 객체를 등록하면 `Cannot redefine plugin` 에러를 낸다.
+  재사용한 플러그인이 예전 버전이라 없는 규칙은 켜지 않는다(없는 규칙을 켜면 설정 에러로 훅이 잠금 전체를 건너뛴다). 훅 사본과 프로젝트가 고정한 태그는 함께 올린다.
+- `quality()`를 인자 없이 부르면 `@typescript-eslint`가 없다고 보고 기본 `no-magic-numbers`를 켠다. TypeScript 프로젝트는 플러그인을 등록한 설정을 넘긴다.
+- 도입하면 바뀌는 것: 규칙 끄는 인라인 주석(`eslint-disable`)이 무시된다(`noInlineConfig`), `public/`·`vendor/`·`generated/` 등은 검사하지 않는다,
+  별칭이 있는 프로젝트의 `./`·`../` import가 에러가 된다(`--fix`로 바뀜). ESLint 9 이상(flat config)이 필요하다.
+
 ### verify 스킬 틀 — `verify-skill`
 
 커밋·PR 전에 "실제로 앱을 띄워 증거로 확인"하는 절차(`verify` 스킬)와 기준 커밋 대비 화면 비교 스크립트를 대상 프로젝트에 깐다.
