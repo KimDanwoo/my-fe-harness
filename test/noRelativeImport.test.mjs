@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { aliasPathFor, aliasRootsOf, parseJsonc } from '../scripts/lint-guard-plugin.mjs'
+import { aliasPathFor, aliasRootsOf, parseJsonc, staticSpecifier } from '../scripts/lint-guard-plugin.mjs'
 
 const RUNTIME = path.join(os.homedir(), '.claude', 'my-fe-harness-runtime')
 const hasRuntime = fs.existsSync(path.join(RUNTIME, 'node_modules', 'eslint')) && fs.existsSync(path.join(RUNTIME, 'node_modules', 'typescript-eslint'))
@@ -88,6 +88,27 @@ test('ESLint 런타임: 별칭이 있는 프로젝트의 상대경로 import·ex
     "'./c': 상대경로 대신 별칭 전체 경로로 가져온다 → '~/ui/c'",
     "'./d': 상대경로 대신 별칭 전체 경로로 가져온다 → '~/ui/d'",
   ])
+})
+
+const TYPE_IMPORTS = "type A = typeof import('./a')\ntype B = import(\"../lib/b\").B\nconst c = () => import(`./c`)\nconst d = (name: string) => import(`./${name}`)\n"
+
+test('ESLint 런타임: 타입 위치 import()와 백틱 경로도 잡고, --fix가 따옴표 모양을 지킨다', { skip: skipWithoutRuntime }, async () => {
+  const files = { 'tsconfig.json': TSCONFIG, 'src/ui/types.ts': TYPE_IMPORTS }
+  assert.deepEqual(await lintProject(files, 'src/ui/types.ts'), [
+    "'./a': 상대경로 대신 별칭 전체 경로로 가져온다 → '~/ui/a'",
+    "'../lib/b': 상대경로 대신 별칭 전체 경로로 가져온다 → '~/lib/b'",
+    "'./c': 상대경로 대신 별칭 전체 경로로 가져온다 → '~/ui/c'",
+  ])
+  const output = await lintProject(files, 'src/ui/types.ts', { fix: true })
+  assert.equal(output, "type A = typeof import('~/ui/a')\ntype B = import(\"~/lib/b\").B\nconst c = () => import(`~/ui/c`)\nconst d = (name: string) => import(`./${name}`)\n")
+})
+
+test('staticSpecifier: 문자열·식 없는 백틱만 경로로 본다', () => {
+  assert.equal(staticSpecifier({ type: 'Literal', value: './a' }), './a')
+  assert.equal(staticSpecifier({ type: 'Literal', value: 1 }), null)
+  assert.equal(staticSpecifier({ type: 'TemplateLiteral', expressions: [], quasis: [{ value: { cooked: './c' } }] }), './c')
+  assert.equal(staticSpecifier({ type: 'TemplateLiteral', expressions: [{}], quasis: [] }), null)
+  assert.equal(staticSpecifier(undefined), null)
 })
 
 test('ESLint 런타임: --fix가 상대경로를 별칭 경로로 바꾸고 따옴표 모양을 지킨다', { skip: skipWithoutRuntime }, async () => {

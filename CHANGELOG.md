@@ -9,7 +9,7 @@
 
 - **상대경로 import 잠금** — 플러그인에 `harness/no-relative-import`를 추가하고 기본 잠금이 `*.{js,jsx,ts,tsx}`에 켠다(`*.config.*`·`*.d.ts` 제외).
   규칙 팩에만 있던 "`./`·`../` 금지 — 같은 폴더도 별칭 전체 경로로"를 기계가 지킨다. 파일마다 가장 가까운 tsconfig·jsconfig의 `paths`(주석·끝 쉼표 허용, `baseUrl` 반영)를
-  읽어 가져오는 파일과 대상이 모두 별칭 범위 안일 때만 잡고, 가장 구체적인 별칭으로 바꿀 경로를 메시지에 주고 `--fix`로 바꾼다(따옴표 모양 유지). ESLint 기본 `no-restricted-imports`를 쓰지 않는 이유:
+  읽어 가져오는 파일과 대상이 모두 별칭 범위 안일 때만 잡는다. import·재수출·동적 import·타입 위치 `import()`(`typeof import('./x')`, 식 없는 백틱 경로 포함)를 보고, 가장 구체적인 별칭으로 바꿀 경로를 메시지에 주고 `--fix`로 바꾼다(따옴표 모양 유지). ESLint 기본 `no-restricted-imports`를 쓰지 않는 이유:
   프로젝트가 같은 규칙을 쓰면 옵션째 덮이고, 루트 하나의 설정으로는 모노레포 앱마다 다른 별칭과 별칭이 안 먹는 node 스크립트를 가릴 수 없다.
 - **props 개수·덩어리 마크업 잠금** — 플러그인에 `harness/max-props`(컴포넌트 props 6개 이상 금지, 인라인 타입·같은 파일의 interface/type을 센다,
   `extends`로 받은 기본 속성은 세지 않음)와 `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)을 추가하고 기본 잠금이 `*.tsx`·`*.jsx`에 켠다.
