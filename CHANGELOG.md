@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **주석 금지 잠금 `harness/no-comment`** — 규칙 팩의 "주석은 달지 않는다"를 기계가 지킨다. 모든 JS·TS 파일(테스트 포함)에서 설명 주석·JSDoc·링크를 단 주석·`@ts-ignore`를 막고,
+  도구 지시문(`@ts-expect-error`, `/// <reference>`, 테스트 환경 지정, 번들러 매직 주석, `prettier-ignore`)과 shebang만 허용한다. 허용 목록은 `lint-guard-baseline.mjs`의 `TOOL_DIRECTIVES` 한 곳.
+  규칙 팩 `patterns`에서 "우회·외부 제약 + 근거 링크" 예외를 없앴다 — 근거는 커밋 메시지·PR에 둔다.
+
 ## [0.5.1] - 2026-11-20
 
 ### Fixed

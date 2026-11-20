@@ -425,8 +425,37 @@ const noRelativeImport = {
   },
 }
 
+export const isAllowedComment = (comment, allowed) =>
+  comment.type === 'Shebang' || allowed.some((pattern) => pattern.test(comment.value))
+
+const noComment = {
+  meta: {
+    type: 'suggestion',
+    schema: [
+      {
+        type: 'object',
+        properties: { allow: { type: 'array', items: { type: 'string' } } },
+        additionalProperties: false,
+      },
+    ],
+    messages: { comment: '주석을 달지 않는다(JSDoc 포함). 설명하고 싶은 내용이 이름으로 드러나도록 코드를 고친다.' },
+  },
+  create(context) {
+    const allowed = (context.options[0]?.allow ?? []).map((pattern) => new RegExp(pattern))
+    const sourceCode = context.sourceCode ?? context.getSourceCode()
+    return {
+      Program() {
+        for (const comment of sourceCode.getAllComments()) {
+          if (!isAllowedComment(comment, allowed)) context.report({ loc: comment.loc, messageId: 'comment' })
+        }
+      },
+    }
+  },
+}
+
 export default {
   rules: {
+    'no-comment': noComment,
     'component-body': componentBody,
     'no-direct-effect': noDirectEffect,
     'no-store-passthrough': noStorePassthrough,
