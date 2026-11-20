@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-20
+
 ### Fixed
 
 - **FSD 교차 import(`@x`) 지원** — `entities/A/@x/B.ts`(같은 레이어의 B 슬라이스에만 여는 A의 API, FSD 공식 표기 — 공식 문서대로 entities 레이어만)를 `independent-slices`·`public-api`가 옆 슬라이스 참조·깊은 import로 잘못 잡았다.

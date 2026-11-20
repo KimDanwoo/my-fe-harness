@@ -1,6 +1,6 @@
 {
   "name": "my-fe-harness",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Frontend convention harness for Claude Code — safety guardrails (PreToolUse hook) plus path-scoped TS/React/Vue/commit/monorepo/FSD rule packs. Commands: install, guard, scaffold, list, status, update, uninstall.",
   "author": { "name": "KimDanwoo" },
   "homepage": "https://github.com/KimDanwoo/my-fe-harness",
