@@ -187,3 +187,60 @@ test('잘못된 설정은 조용히 규칙을 끄지 않고 에러를 낸다', (
   assert.throws(() => fsd({ srcDir: '' }), /srcDir/)
   assert.equal(fsdSettings({ srcDir: './apps/web/src/' }).srcDir, 'apps/web/src')
 })
+
+test('교차 import(@x): A/@x/B는 같은 레이어 B 슬라이스만 쓰고, 다른 곳은 공개 API로', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const crossImport = "import { DestinyChart } from '@entities/destiny/@x/ziwei';"
+  assert.deepEqual(rules(crossImport, 'src/entities/ziwei/api/getZiweiReading.ts'), [])
+  assert.deepEqual(rules(crossImport, 'src/entities/astro/api/getAstro.ts'), ['fsd/public-api', 'fsd/independent-slices'])
+  assert.deepEqual(rules(crossImport, 'src/features/share/model/share.ts'), ['fsd/public-api'])
+  assert.deepEqual(rules("import { DestinyChart } from '@entities/destiny/@x/ziwei/deep';", 'src/entities/ziwei/api/getZiweiReading.ts'), [
+    'fsd/public-api',
+    'fsd/independent-slices',
+  ])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei.ts'), [])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei/chart.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei/index.ts'), ['fsd/slice-structure'])
+})
+
+test('교차 import(@x) 세부: 상대경로·확장자 import는 같게, 자기 슬라이스는 내부로, entities 밖과 index·선언 파일은 막는다', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const consumer = 'src/entities/ziwei/api/getZiweiReading.ts'
+  assert.deepEqual(rules("import { Chart } from '../../destiny/@x/ziwei';", consumer), [])
+  assert.deepEqual(rules("import { Chart } from '@entities/destiny/@x/ziwei.ts';", consumer), [])
+  assert.deepEqual(rules("import { Chart } from '@entities/destiny/@x/ziwei';", 'src/entities/destiny/lib/chart.ts'), [])
+  assert.deepEqual(rules("import { Like } from '@features/like/@x/share';", 'src/features/share/model/share.ts'), [
+    'fsd/public-api',
+    'fsd/independent-slices',
+  ])
+  assert.deepEqual(rules('export const value = 1;', 'src/features/like/@x/share.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/index.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei.d.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules("import { Chart } from '@entities/features/@x/shared';", 'src/entities/shared/api/x.ts'), [])
+})
+
+test('assets 세그먼트: shared/assets는 깊이와 상관없이, 슬라이스 assets는 그 슬라이스 안에서만', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const image = (from) => `import score from '${from}';`
+  assert.deepEqual(rules(image('@shared/assets/images/today/score_1.webp'), 'src/_pages/today/model/todayCuts.ts'), [])
+  assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/entities/tarot/ui/tarot-card/cardImages.ts'), [])
+  assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/_pages/today/ui/Today.tsx'), ['fsd/public-api'])
+  assert.deepEqual(rules(image('@shared/assets/images/back.webp'), 'src/shared/lib/share/share.ts'), [])
+  assert.deepEqual(lint(image('@entities/tarot/assets/back.webp'), 'src/_pages/today/ui/Today.tsx', NEXT_OFFICIAL)[0].message, 'entities/tarot/assets는 그 슬라이스 전용이다. 여러 슬라이스가 쓰면 shared/assets로 옮긴다.')
+})
+
+test('assets 세그먼트에는 정적 자산만: 코드 파일은 구조 오류, 코드 경로처럼 깊이 들어가면 깊은 import', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/tarot/assets/sizes.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/shared/assets/fonts.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules("import { util } from '@shared/assets/a/b/util';", 'src/_pages/today/ui/Today.tsx'), ['fsd/public-api'])
+})
+
+test('@x 이름: 대문자·하이픈·숫자 시작과 .tsx는 받고, 선언 파일·테스트·index.server는 구조 오류, entities 밖 @x import는 공개 API 위반', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  for (const ok of ['Ziwei.ts', 'my-slice.ts', '2fa.ts', 'ziwei.tsx'])
+    assert.deepEqual(rules('export const value = 1;', `src/entities/destiny/@x/${ok}`), [], ok)
+  for (const bad of ['ziwei.d.ts', 'ziwei.test.ts', 'index.server.ts'])
+    assert.ok(rules('export const value = 1;', `src/entities/destiny/@x/${bad}`).includes('fsd/slice-structure'), bad)
+  assert.deepEqual(rules("import { Home } from '@pages/home/@x/report';", 'src/_pages/report/ui/Report.tsx'), ['fsd/public-api', 'fsd/independent-slices'])
+})

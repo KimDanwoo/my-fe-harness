@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **FSD 교차 import(`@x`) 지원** — `entities/A/@x/B.ts`(같은 레이어의 B 슬라이스에만 여는 A의 API, FSD 공식 표기 — 공식 문서대로 entities 레이어만)를 `independent-slices`·`public-api`가 옆 슬라이스 참조·깊은 import로 잘못 잡았다.
+  이제 B 슬라이스가 `@entities/A/@x/B`를 가져오는 것은 허용하고, 다른 슬라이스·다른 레이어가 쓰거나 `@x` 안을 더 파고들면 막는다. `slice-structure`는 entities 슬라이스 루트의
+  `@x/<슬라이스>.ts(x)`만 허용한다(`index`·선언 파일·폴더 형태·entities 밖은 막음). cheongyeon-saju에서 이 오탐 24건이 사라졌다.
+- **FSD `assets` 세그먼트** — 규칙 팩(`rules/fsd.md`)은 정적 자산을 쓰는 슬라이스의 `assets/`, 여러 슬라이스가 쓰면 `shared/assets/`에 두라고 하는데,
+  `fsd` 규칙의 세그먼트 목록에 `assets`가 없어 `@shared/assets/images/…` import를 깊은 import로 잡았다. 이제 `shared/assets`는 깊이와 상관없이 가져오고,
+  슬라이스의 `assets`는 그 슬라이스 안에서만 쓴다. cheongyeon-saju에서 이 오탐 40건이 사라졌다.
+
 ## [0.5.0] - 2026-11-20
 
 ### Added
