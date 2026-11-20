@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- **lint-guard가 ESLint 일괄 억제를 따라 부채를 놓침** — 프로젝트에 `eslint-suppressions.json`이 있으면 훅이 실행하는 ESLint CLI도 그 억제를 적용해,
+  Claude가 부채 파일을 고쳐도 남은 위반을 잡지 못했다. 억제 파일이 있는 프로젝트에서는 빈 억제 파일을 `--suppressions-location`으로 넘긴다.
 - **`--global` 훅 경로** — exec 형식(`args`)은 셸이 없어 `${HOME}`이 펼쳐지지 않는다. 전역 설치(`guard`·`lint-guard`)는
   셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
 

@@ -163,6 +163,26 @@ process.stdout.write('[]')
   assert.match(calls[1], /^--fix/)
 })
 
+test('일괄 억제: 프로젝트에 eslint-suppressions.json이 있으면 빈 억제 파일로 바꿔 끼워 손댄 파일의 부채도 잡는다', () => {
+  const root = project()
+  const argsLog = path.join(root, 'args.log')
+  fs.writeFileSync(path.join(root, 'node_modules', '.bin', 'eslint'), `#!/usr/bin/env node
+const fs = require('node:fs')
+fs.appendFileSync(${JSON.stringify(argsLog)}, process.argv.slice(2).join(' ') + '\\n')
+process.stdout.write('[]')
+`, { mode: 0o755 })
+  assert.equal(runGuard(edit(root, 'a.ts', 'ok')).status, 0)
+  assert.doesNotMatch(fs.readFileSync(argsLog, 'utf8'), /--suppressions-location/)
+
+  fs.writeFileSync(path.join(root, 'eslint-suppressions.json'), JSON.stringify({ 'src/a.ts': { complexity: { count: 1 } } }))
+  fs.rmSync(argsLog)
+  assert.equal(runGuard(edit(root, 'a.ts', 'ok')).status, 0)
+  const location = fs.readFileSync(argsLog, 'utf8').match(/--suppressions-location (\S+) --fix/)?.[1]
+  assert.ok(location, '억제 파일 위치를 넘겨야 한다')
+  assert.notEqual(path.dirname(location), root)
+  assert.deepEqual(JSON.parse(fs.readFileSync(location, 'utf8')), {})
+})
+
 test('기본 잠금: 중첩 삼항·복잡도·매직넘버 규칙과 인라인 끄기 금지를 담는다', async () => {
   const { harnessBaseline } = await import('../scripts/lint-guard-baseline.mjs')
   const configs = harnessBaseline([])
