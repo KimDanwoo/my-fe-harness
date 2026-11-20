@@ -5,6 +5,8 @@ paths:
 
 # FSD (Feature-Sliced Design) 규칙
 
+> 적용 조건: **FSD 레이어(`features`·`entities`·`shared` 등)를 쓰는 프로젝트에만.** 그 밖의 구조(예: Astro의 `src/components`·`src/pages`)면 이 규칙을 무시한다.
+
 ## 레이어 — 위에서 아래로만 import 가능
 
 ```
