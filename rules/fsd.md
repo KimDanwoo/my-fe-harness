@@ -85,7 +85,7 @@ entities/user/
   한 파일을 가리키는 import 문자열이 하나로 통일되고, 슬라이스 안에서 파일을 옮겨도 다른 import가 깨지지 않는다.
 - 별칭으로 세그먼트까지 들어가는 건 **같은 슬라이스 안에서만**이다. 슬라이스 밖에서는 공개 API로만.
   자기 `index.ts`는 경유하지 않는다 — 순환 의존이 된다.
-- 강제는 ESLint로: `no-restricted-imports` 패턴 `^\.{1,2}/`로 상대경로를 막고, 경계는 문자열 패턴이 아니라
+- 강제는 ESLint로: 상대경로는 하네스 기본 잠금 `harness/no-relative-import`가 막고, 경계는 문자열 패턴이 아니라
   가져오는 쪽 위치를 아는 `import-x/no-restricted-paths`로 지킨다(문자열 패턴은 같은 슬라이스 안의 별칭 경로까지 막는다).
 - **세그먼트 안에 `index.ts`(배럴)를 두지 않는다**(`model/index.ts`, `model/hooks/index.ts` 등). 출입구는 루트 하나다.
 - 서버 전용 코드(`server-only`, `next/headers`, fs 등)는 `index.ts`에 섞지 않고 `index.server.ts`로 분리한다 —

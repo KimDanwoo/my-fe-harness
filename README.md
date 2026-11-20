@@ -231,6 +231,9 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 - **합성 컴포넌트 규칙**(같은 플러그인) — `harness/max-props`(props 6개 이상 금지, `extends`로 받은 기본 속성은 세지 않음)와
   `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)를 error로 켠다. 상태를 props로 릴레이하거나 한 화면에 마크업을 쌓는 대신
   Root가 상태를 context로 내려주고 파트가 구독하는 합성 컴포넌트, children 조립, 설정 배열 + map으로 나누게 한다.
+- **상대경로 import 금지**(같은 플러그인) — `harness/no-relative-import`가 `*.{js,jsx,ts,tsx}`의 `./`·`../` import·재수출·동적 import를 막고
+  바꿀 별칭 경로를 알려준다(`--fix`로 자동으로 바뀐다 — 훅이 고친 파일에 먼저 돌린다). 파일마다 가장 가까운 `tsconfig.json`·`jsconfig.json`의 `paths`를 읽어, 가져오는 파일과 대상이 **둘 다 별칭 범위 안일 때만** 잡는다 —
+  별칭이 없는 프로젝트, node로 바로 도는 `.mjs`·`.cjs`, 별칭 밖 스크립트, `*.config.*`, `*.d.ts`는 건드리지 않는다. 모노레포는 앱마다 자기 별칭을 쓴다.
 - 고친 파일은 `eslint --fix`로 먼저 자동 수정하고, 끝낼 때는 그 세션·그 에이전트가 고친 파일만 본다. 서브에이전트 종료(SubagentStop)도 검사한다.
 - 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
 
