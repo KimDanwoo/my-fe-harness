@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-20
+
 ### Added
 
 - **FSD 구조 잠금 `fsd(options)`** — labs에만 있던 FSD 규칙(`fsd/independent-slices`·`public-api`·`slice-structure`·`component-file`, 옵션으로 `routing-location`·`entity-state`)을
