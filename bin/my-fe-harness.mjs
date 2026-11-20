@@ -17,6 +17,8 @@ const PARSE_OPTIONS = {
   'dry-run': { type: 'boolean', default: false },
   global: { type: 'boolean', short: 'g', default: false },
   'no-agents': { type: 'boolean', default: false },
+  yes: { type: 'boolean', short: 'y', default: false },
+  'no-install': { type: 'boolean', default: false },
   help: { type: 'boolean', short: 'h', default: false },
   version: { type: 'boolean', short: 'v', default: false },
 }
@@ -47,6 +49,8 @@ function buildOptions(values) {
     dryRun: values['dry-run'],
     global: values.global,
     agents: !values['no-agents'],
+    yes: values.yes,
+    install: !values['no-install'],
     targetDir: path.resolve(values.target),
   }
 }
@@ -55,10 +59,12 @@ async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: PARSE_OPTIONS })
   const [command = 'init', ...rest] = positionals
 
-  if (values.version || command === 'version') return printVersion()
+  const isVersionRequest = values.version || command === 'version'
+  if (isVersionRequest) return printVersion()
   const options = buildOptions(values)
 
-  if (values.help || command === 'help') return printHelp()
+  const isHelpRequest = values.help || command === 'help'
+  if (isHelpRequest) return printHelp()
 
   if (!Object.hasOwn(COMMANDS, command)) throw new Error(`알 수 없는 명령: "${command}" — my-fe-harness help 참고`)
   return COMMANDS[command](rest, options)

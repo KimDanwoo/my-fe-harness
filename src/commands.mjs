@@ -11,7 +11,10 @@ import { installVerifySkill } from './installVerifySkill.mjs'
 import { installAgents, agentsStatus } from './installAgents.mjs'
 import { writeStackStamp, stampState } from './stack.mjs'
 import { uninstall } from './uninstall.mjs'
-import { checkStructure } from './check.mjs'
+import { checkStructure, installedStructure } from './check.mjs'
+import { checkFsdWithEslint } from './checkFsd.mjs'
+import { installProjectSetup, projectFileStatuses } from './installProjectSetup.mjs'
+import { printFsdCheck, printProjectSetup } from './printProjectSetup.mjs'
 import { scaffoldStructure } from './scaffold.mjs'
 import { detectFrameworks } from './detect.mjs'
 import { hashFile, readManifest, writeManifest, resolveClaudeDir, manifestPath } from './manifest.mjs'
@@ -25,8 +28,6 @@ const PACK_ID_WIDTH = 14
 const VERIFY_FILE_WIDTH = 44
 const BYTES_PER_KB = 1024
 
-// 명령당 매니페스트를 한 번 읽어 넘기고, 끝에 한 번만 쓴다(read-modify-write 중복 제거).
-// 쓰기 시 현재 패키지 버전을 기록해 이후 status/update가 업그레이드 여부를 판단한다.
 function withManifest(options, fn) {
   const claudeDir = resolveClaudeDir(options)
   const manifest = readManifest(claudeDir)
@@ -43,8 +44,9 @@ export async function runInit(options) {
   if (detected.length > 0) {
     console.log(`\n감지된 프레임워크: ${detected.join(', ')} → 권장 "core ${detected.join(' ')}"`)
   }
-  const packs = options.all ? rulePacks() : await promptPackSelection(['core', ...detected])
-  if (!packs || packs.length === 0) {
+  const packs = await choosePacks(options, ['core', ...detected])
+  const isCancelled = !packs || packs.length === 0
+  if (isCancelled) {
     console.log('취소되었습니다.')
     return
   }
@@ -54,6 +56,23 @@ export async function runInit(options) {
   if (structure) applyStructure(structure, options)
 
   applyGuard(options)
+  runLintGuard(options)
+  runVerifyGate(options)
+  applyProjectSetup(options, structure)
+}
+
+async function choosePacks(options, defaultTokens) {
+  if (options.all) return rulePacks()
+  if (options.yes) return resolvePacks(defaultTokens)
+  return promptPackSelection(defaultTokens)
+}
+
+function applyProjectSetup(options, structure) {
+  const result = withManifest(options, (manifest) => {
+    const hasFsd = structure?.id === 'fsd' || 'fsd.md' in manifest.rules
+    return installProjectSetup(options, manifest, { hasFsd })
+  })
+  printProjectSetup(result, options)
 }
 
 export function runAdd(names, options) {
@@ -155,12 +174,12 @@ export function printHelp() {
 async function pickStructure(options) {
   if (options.structure) return resolveStructure(options.structure)
   if (options.fsd) return resolveStructure('fsd')
-  if (options.all) return null
+  const shouldSkipPrompt = options.all || options.yes
+  if (shouldSkipPrompt) return null
   return promptStructureSelection()
 }
 
 function applyStructure(structure, options) {
-  // 구조 규칙은 스캐폴드된 src/와 짝이므로 항상 프로젝트 스코프(전역 아님).
   install(resolvePacks([structure.id]), { ...options, global: false })
 
   const results = scaffoldStructure(structure, options)
@@ -203,7 +222,6 @@ function install(packs, options) {
   })
 }
 
-// 설치된 규칙을 AGENTS.md 블록으로도 내보낸다(Codex 등). --no-agents면 건너뛴다.
 function syncAgents(options, manifest) {
   if (!options.agents) return
   const { file, status, bytes, isLarge, hasOverride } = installAgents(options, manifest)
@@ -257,6 +275,13 @@ function printUninstalledHooks(result, options) {
   if (result.verifyGate) console.log(uninstallRow('verify-gate.mjs', result.verifyGate.scriptStatus, ''))
   for (const { file, status } of result.verifySkill ?? []) console.log(uninstallRow(file, status, ''))
   if (result.agents) printUninstalledAgents(result.agents, options)
+  printUninstalledProject(result.project)
+}
+
+function printUninstalledProject(project) {
+  if (!project) return
+  for (const { file, status } of project.files) console.log(uninstallRow(file, status, ''))
+  if (project.packageJson) console.log(uninstallRow(project.packageJson.file, project.packageJson.status, ' (하네스가 추가한 항목)'))
 }
 
 function printUninstalledAgents(agents, options) {
@@ -287,7 +312,8 @@ export function runStatus(options) {
 }
 
 function hasInstallRecord(entries, manifest) {
-  return entries.length > 0 || Boolean(manifest.hook || manifest.lintHook || manifest.verifyGate || manifest.verifySkill || manifest.agents)
+  const records = [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.verifySkill, manifest.agents, manifest.project]
+  return entries.length > 0 || records.some(Boolean)
 }
 
 function printStatusVersion(manifest) {
@@ -309,6 +335,14 @@ function printStatusHooks(options, manifest) {
   if (manifest.hook) printStatusRow('safety-guard.mjs', hookDiskStatus(options, manifest.hook), '')
   if (manifest.lintHook) printStatusRow('lint-guard.mjs', hookDiskStatus(options, manifest.lintHook), '')
   for (const [rel, sha] of Object.entries(manifest.verifySkill?.files ?? {})) printStatusRow(rel, diskStatus(path.join(options.targetDir, rel), sha), '')
+  printStatusProject(options, manifest.project)
+}
+
+function printStatusProject(options, project) {
+  if (!project) return
+  for (const { key, abs, sha } of projectFileStatuses(options.targetDir, project)) printStatusRow(key, diskStatus(abs, sha), '')
+  const added = ['devDependencies', 'scripts'].flatMap((section) => Object.keys(project.packageJson?.[section] ?? {}))
+  if (added.length > 0) console.log(`  · ${project.packageJson.file.padEnd(NAME_WIDTH)} 하네스가 추가한 항목: ${added.join(', ')}`)
 }
 
 function printStatusAgents(options, manifest) {
@@ -322,19 +356,20 @@ function printStatusWarnings(options, manifest, entries) {
   const modified = entries.filter(({ file, sha, dir }) => diskStatus(path.join(dir, file), sha) === 'modified')
   if (modified.length > 0) console.log(`\n  ⚠ 수정된 파일 ${modified.length}개 — uninstall/update 시 보존됩니다.`)
 
-  // 스탬프는 설치 시점 스냅샷이라 의존성·구조가 바뀌면 낡는다. 낡았을 때만 알린다(평소 무간섭).
   if (stampState({ ...options, base: rulesBase(options) }, manifest) === 'stale') {
     console.log('\n  ⚠ _stack.md 가 낡았습니다 — 의존성·구조·alias가 설치 후 바뀌었습니다. update 로 갱신하세요.')
   }
 }
 
-// 규칙은 설치 시점 스냅샷이고 코드는 그 뒤로 자란다 — 지금 코드가 그 규칙을 지키는지 되읽는다.
 export function runCheck(options) {
-  const { structure, files, violations } = checkStructure(options)
+  const structure = installedStructure(options)
   if (!structure) {
     console.log('\n구조 점검 — 설치된 폴더 구조 팩이 없습니다. `scaffold` 로 구조를 먼저 고르세요.')
     return
   }
+  if (structure.id === 'fsd') return printFsdCheck(checkFsdWithEslint(options.targetDir))
+
+  const { files, violations } = checkStructure(options, structure)
 
   console.log(`\n구조 점검 [${structure.id}] — src/ 코드 파일 ${files}개\n`)
   if (files === 0) {
@@ -355,7 +390,6 @@ export function runCheck(options) {
 }
 
 export function runUpdate(options) {
-  // 설치 기록이 없으면 아무것도 하지 않는다(빈 매니페스트를 새로 만드는 부작용 방지).
   if (!fs.existsSync(manifestPath(resolveClaudeDir(options)))) {
     console.log(`\n업데이트${options.global ? ' [전역]' : ''} — 설치 기록이 없습니다. 먼저 add 하세요.`)
     return
@@ -377,7 +411,8 @@ export function runUpdate(options) {
       const src = ruleSourcePath(file)
       const recorded = manifest.rules[file]
       const outcome = updateOne({ dest, src, recorded, dryRun: options.dryRun })
-      if (outcome.status === 'updated' && !options.dryRun) manifest.rules[file] = outcome.newSha
+      const shouldRecord = outcome.status === 'updated' && !options.dryRun
+      if (shouldRecord) manifest.rules[file] = outcome.newSha
       if (outcome.status === 'missing') delete manifest.rules[file]
       console.log(`  ${updateIcon(outcome.status)} ${file.padEnd(NAME_WIDTH)} ${updateLabel(outcome.status)}`)
     }
@@ -389,7 +424,6 @@ export function runUpdate(options) {
   })
 }
 
-// update 대상 한 파일의 판정: 없음 / 수정됨(보존) / 이미 최신 / 갱신.
 function updateOne({ dest, src, recorded, dryRun }) {
   if (!fs.existsSync(dest)) return { status: 'missing' }
   if (!fs.existsSync(src)) return { status: 'orphan' }
@@ -400,7 +434,6 @@ function updateOne({ dest, src, recorded, dryRun }) {
   return { status: 'updated', newSha: srcSha }
 }
 
-// 파일이 매니페스트 해시와 일치하는지: 우리 것 그대로 / 수정됨 / 없음.
 function diskStatus(file, recordedSha) {
   if (!fs.existsSync(file)) return 'missing'
   return hashFile(file) === recordedSha ? 'intact' : 'modified'
@@ -482,7 +515,9 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
   npx my-fe-harness <command> [options]
 
 명령:
-  init                  대화형 설치 (규칙 팩 선택 → 폴더 구조 선택)
+  init                  한 번에 설치: 규칙 팩 → 폴더 구조 → 안전장치·린트 강제 훅·검증 게이트
+                        → eslint.config.mjs(quality·fsd)·package.json(의존성·lint·typecheck)·의존성 설치
+                        → .github/workflows/harness.yml (이미 있는 파일은 보존)
   add <packs...>        지정한 팩 설치
                         권장(린): add core react  ·  core = safety+typescript+patterns
                         전체(무거움): add all
@@ -502,8 +537,8 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
                         직접 수정·생성한 파일은 보존
   status                이 프로젝트에 설치된 규칙·훅과 수정 여부 표시
   check                 설치된 구조 팩의 의존 방향을 실제 src/ 코드에 대해 점검
-                        아래→위 import·옆 슬라이스 직접 참조·deep import를 파일:줄로 보고
-                        위반이 있으면 종료 코드 1 (CI에 걸 수 있음)
+                        fsd는 프로젝트 ESLint의 fsd 규칙 결과를, 그 밖의 구조는 import 스캔 결과를
+                        파일:줄로 보고. 위반이 있거나 fsd 규칙을 못 돌리면 종료 코드 1 (CI에 걸 수 있음)
   update                사용자가 안 건드린 규칙만 최신 원본으로 갱신(수정본 보존)
   list                  사용 가능한 팩·구조 목록
   version               버전 출력 (-v, --version)
@@ -517,6 +552,8 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
   -g, --global          ~/.claude 에 설치 (모든 프로젝트 적용, add·guard)
                         Codex가 설치돼 있으면 ~/.codex/AGENTS.md 에도 규칙 블록 반영
   --no-agents           AGENTS.md 규칙 블록을 만들지 않음 (Claude 전용)
+  -y, --yes             init을 묻지 않고 진행 (감지한 권장 팩, 구조는 --structure·--fsd로만)
+  --no-install          init이 package.json만 고치고 의존성 설치는 하지 않음
   --force               기존 파일 덮어쓰기
   --dry-run             실제 쓰기 없이 수행 내용만 출력
 

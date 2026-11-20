@@ -4,11 +4,10 @@ import path from 'node:path'
 import { removeAgents } from './installAgents.mjs'
 import { GUARD_MARK } from './installHook.mjs'
 import { handlerHasMark } from './installLintHook.mjs'
+import { removeProjectSetup } from './installProjectSetup.mjs'
 import { removeVerifySkillDirs } from './installVerifySkill.mjs'
 import { hashFile, isInside, manifestPath, readManifest, writeFileAtomic } from './manifest.mjs'
 
-// 매니페스트에 기록된, 우리가 쓴 그대로인 파일만 제거한다.
-// 해시가 다르면(사용자 수정) 보존하고, 경로가 .claude 밖이면(변조된 매니페스트) 건너뛴다.
 export function uninstall({ targetDir, dryRun, global }) {
   const base = global ? os.homedir() : targetDir
   const claudeDir = path.join(base, '.claude')
@@ -22,15 +21,16 @@ export function uninstall({ targetDir, dryRun, global }) {
   const verifyGate = manifest.verifyGate ? removeHook(manifest.verifyGate, base, claudeDir, dryRun) : null
   const verifySkill = manifest.verifySkill ? removeVerifySkill(manifest.verifySkill, base, dryRun) : null
   const agents = manifest.agents ? removeAgents({ targetDir, global }, manifest, dryRun) : null
+  const project = manifest.project ? removeProjectSetup(targetDir, manifest.project, dryRun) : null
 
   const tracked = rules.length + files.length + countRecorded(manifest)
   const manifestRemoved = !dryRun && tracked > 0 && removeManifest(claudeDir)
 
-  return { rules, files, hook, lintHook, verifyGate, verifySkill, agents, tracked, manifestRemoved, claudeDir }
+  return { rules, files, hook, lintHook, verifyGate, verifySkill, agents, project, tracked, manifestRemoved, claudeDir }
 }
 
 function countRecorded(manifest) {
-  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.verifySkill, manifest.agents].filter(Boolean).length
+  return [manifest.hook, manifest.lintHook, manifest.verifyGate, manifest.verifySkill, manifest.agents, manifest.project].filter(Boolean).length
 }
 
 function removeVerifySkill(verifySkill, base, dryRun) {
@@ -67,7 +67,8 @@ function removeHook(hook, base, claudeDir, dryRun) {
   removeRuntime(hook, base, claudeDir, dryRun)
   const settingsStatus = stripHookEntry(settingsPath, hook.mark ?? GUARD_MARK, hook.events ?? ['PreToolUse'], dryRun)
   const scriptDir = path.dirname(scriptDest)
-  if (!dryRun && isInside(claudeDir, scriptDir)) pruneEmptyDir(scriptDir)
+  const shouldPrune = !dryRun && isInside(claudeDir, scriptDir)
+  if (shouldPrune) pruneEmptyDir(scriptDir)
   return { scriptStatus, settingsStatus }
 }
 
@@ -80,18 +81,18 @@ function removeScript(scriptDest, recordedSha, claudeDir, dryRun) {
 }
 
 function removeRuntime(hook, base, claudeDir, dryRun) {
-  if (!hook.runtime || dryRun) return
+  const shouldSkip = !hook.runtime || dryRun
+  if (shouldSkip) return
   const runtimeDir = path.join(base, hook.runtime)
   if (isInside(claudeDir, runtimeDir)) fs.rmSync(runtimeDir, { recursive: true, force: true })
 }
 
-// 훅이 함께 쓰는 파일(예: lint-guard의 기본 잠금)도 우리가 쓴 그대로일 때만 지운다.
 function removeCompanion(file, sha, claudeDir, dryRun) {
-  if (!isInside(claudeDir, file) || !fs.existsSync(file) || hashFile(file) !== sha) return
+  const isOurs = isInside(claudeDir, file) && fs.existsSync(file) && hashFile(file) === sha
+  if (!isOurs) return
   if (!dryRun) fs.unlinkSync(file)
 }
 
-// 지정한 이벤트들에서 우리 훅 그룹만 제거하고 나머지 설정은 보존한다.
 function stripHookEntry(settingsPath, mark, events, dryRun) {
   if (!fs.existsSync(settingsPath)) return 'missing'
   let settings
@@ -102,7 +103,8 @@ function stripHookEntry(settingsPath, mark, events, dryRun) {
   }
   const removedFrom = events.filter((event) => stripEvent(settings, event, mark))
   if (removedFrom.length === 0) return 'not-present'
-  if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks
+  const hasEmptyHooks = Boolean(settings.hooks) && Object.keys(settings.hooks).length === 0
+  if (hasEmptyHooks) delete settings.hooks
 
   if (!dryRun) writeFileAtomic(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   return 'removed'
@@ -118,11 +120,10 @@ function stripEvent(settings, event, mark) {
   return true
 }
 
-// 비어 있을 때만 디렉토리 제거(재귀 삭제 안 함).
 function pruneEmptyDir(dir) {
   try {
-    if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+    const isEmptyDir = fs.existsSync(dir) && fs.readdirSync(dir).length === 0
+    if (isEmptyDir) fs.rmdirSync(dir)
   } catch {
-    // 경합·권한 문제는 무시 — 정리 실패가 uninstall을 깨뜨리지 않는다.
   }
 }

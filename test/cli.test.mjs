@@ -10,7 +10,6 @@ import { hashFile, readManifest } from '../src/manifest.mjs'
 import { PACKAGE_VERSION } from '../src/version.mjs'
 
 const BIN = fileURLToPath(new URL('../bin/my-fe-harness.mjs', import.meta.url))
-// 전역 테스트가 실제 Codex 홈을 건드리지 않게 — 자식 프로세스는 sandboxed HOME/.codex만 본다.
 delete process.env.CODEX_HOME
 
 function cli(args, { input = '', env } = {}) {
@@ -18,7 +17,6 @@ function cli(args, { input = '', env } = {}) {
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mfh-'))
-// 규칙 팩 파일만 — 스택 스탬프(_stack.md)는 제외한다.
 const rules = (d) => {
   const p = path.join(d, '.claude/rules')
   return fs.existsSync(p) ? fs.readdirSync(p).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort() : []
@@ -143,7 +141,6 @@ test('non-TTY init errors cleanly (no hang)', () =>
     assert.match(out, /비-TTY/)
   }))
 
-// ---- --global (sandboxed HOME so the real home is never touched) ----
 test('add --global writes to sandboxed ~/.claude/rules', () =>
   withTmp((home) => {
     cli(['add', 'core', '--global'], { env: { ...process.env, HOME: home } })
@@ -151,8 +148,6 @@ test('add --global writes to sandboxed ~/.claude/rules', () =>
     assert.deepEqual(rr, ['patterns.md', 'safety.md', 'typescript.md'])
   }))
 
-// args(exec 형식)는 셸이 없어 $HOME이 펼쳐지지 않는다 — 전역은 셸 형식이어야 한다.
-// https://code.claude.com/docs/en/hooks ("Exec form ... There is no shell")
 test('guard --global writes a shell-form hook so $HOME expands', () =>
   withTmp((home) => {
     cli(['guard', '--global'], { env: { ...process.env, HOME: home } })
@@ -183,7 +178,6 @@ test('lint-guard --global writes shell-form PostToolUse·Stop hooks', () =>
     assert.ok(fs.existsSync(path.join(home, '.claude/hooks/lint-guard.mjs')))
   }))
 
-// ---- framework auto-detect ----
 test('detectFrameworks reads package.json deps', () =>
   withTmp((d) => {
     fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ dependencies: { react: '18', next: '14' } }))
@@ -196,7 +190,6 @@ test('detectFrameworks reads package.json deps', () =>
 
 test('detectFrameworks returns [] when no package.json', () => withTmp((d) => assert.deepEqual(detectFrameworks(d), [])))
 
-// ---- 스택 스탬프(_stack.md) ----
 const readStamp = (d) => fs.readFileSync(path.join(d, '.claude/rules/_stack.md'), 'utf8')
 
 test('install writes _stack.md recording detected framework + installed packs', () =>
@@ -206,7 +199,6 @@ test('install writes _stack.md recording detected framework + installed packs', 
     const stamp = readStamp(d)
     assert.match(stamp, /react/)
     assert.match(stamp, /typescript/)
-    // 팩 개수 카운트는 스탬프를 세지 않는다.
     assert.equal(rules(d).length, 4)
   }))
 
@@ -218,16 +210,13 @@ test('_stack.md not written for --global (no single project stack)', () =>
 
 test('_stack.md skipped when no FE stack detected', () =>
   withTmp((d) => {
-    // package.json 없음 → 스택 미감지 → 항상-로드되는 스탬프를 만들지 않는다.
     cli(['add', 'ts', '--target', d])
     assert.ok(!fs.existsSync(path.join(d, '.claude/rules/_stack.md')))
-    // 비-FE 의존성만 있어도 스킵.
     fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ dependencies: { lodash: '4' } }))
     cli(['add', 'ts', '--force', '--target', d])
     assert.ok(!fs.existsSync(path.join(d, '.claude/rules/_stack.md')))
   }))
 
-// ---- 프로젝트 고유 컨벤션 감지 ----
 const seedProject = (d, { pkg = {}, tsconfig, srcDirs = [] } = {}) => {
   fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify(pkg))
   if (tsconfig !== undefined) fs.writeFileSync(path.join(d, 'tsconfig.json'), tsconfig)
@@ -241,7 +230,6 @@ test('스탬프는 프로젝트가 실제로 쓰는 라이브러리·구조·ali
         dependencies: { react: '18', '@tanstack/react-query': '5', zod: '3', axios: '1' },
         devDependencies: { tailwindcss: '3', vitest: '1' },
       },
-      // 주석·트레일링 콤마가 있는 실제 tsconfig 형태.
       tsconfig: '{\n  // paths\n  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },\n}',
       srcDirs: ['entities', 'features', 'shared'],
     })
@@ -275,7 +263,6 @@ test('프레임워크가 없어도 컨벤션이 있으면 스탬프를 쓴다', 
     assert.match(stamp, /`src\/` 최상위: lib/)
   }))
 
-// 스탬프는 설치 시점 스냅샷이다 — 설치 후 라이브러리를 깔면 낡는다.
 test('설치 후 라이브러리를 추가하면 status가 스탬프 낡음을 알린다', () =>
   withTmp((d) => {
     seedProject(d, { pkg: { dependencies: { react: '18', jotai: '2' } } })
@@ -317,7 +304,6 @@ test('tsconfig가 깨져 있어도 설치는 성공하고 alias 줄만 빠진다
     assert.ok(!stamp.includes('import alias'))
   }))
 
-// ---- check: 구조 의존 방향 점검 ----
 const writeSrc = (d, files) => {
   for (const [rel, body] of Object.entries(files)) {
     const dest = path.join(d, 'src', rel)
@@ -336,21 +322,21 @@ test('check: 구조 팩이 없으면 안내만 하고 실패시키지 않는다'
     assert.match(out, /구조 팩이 없습니다/)
   }))
 
-test('check: fsd 아래→위 import를 파일:줄로 잡고 종료 코드 1', () =>
+test('check: 아래→위 import를 파일:줄로 잡고 종료 코드 1', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
-    writeSrc(d, { 'entities/user/ui/UserCard.tsx': "import { LoginForm } from '@/features/auth'\n" })
+    writeSrc(d, { 'features/auth/ui/LoginForm.tsx': "import { HomePage } from '@/pages/home'\n" })
 
     const { code, out } = cli(['check', '--target', d])
     assert.equal(code, 1)
-    assert.match(out, /entities\/user\/ui\/UserCard\.tsx:1/)
-    assert.match(out, /아래→위 import/)
+    assert.match(out, /features\/auth\/ui\/LoginForm\.tsx:1/)
+    assert.match(out, /아래→위 import — features 는 pages 를 참조할 수 없다/)
   }))
 
-test('check: Next.js용 _pages·_app 폴더도 같은 레이어로 검사한다', () =>
+test('check: Next.js용 _pages 폴더도 같은 레이어로 검사한다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, { 'features/auth/ui/LoginForm.tsx': "import { HomePage } from '@/_pages/home'\n", '_pages/home/index.ts': 'export const HomePage = 1\n' })
 
@@ -361,67 +347,38 @@ test('check: Next.js용 _pages·_app 폴더도 같은 레이어로 검사한다'
 
 test('check: 같은 레이어의 옆 슬라이스 직접 import를 잡는다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, { 'features/cart/model/store.ts': "import { toggleLike } from '@/features/like'\n" })
 
     const { out } = cli(['check', '--target', d])
-    assert.match(out, /다른 슬라이스 직접 import/)
+    assert.match(out, /다른 슬라이스 직접 import — features\/like/)
   }))
 
 test('check: 슬라이스 내부 deep import를 잡되 배럴은 통과시킨다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, {
-      'pages/HomePage.tsx': "import { userStore } from '@/entities/user/model/store'\n",
-      // widgets는 스캐폴드하지 않지만 기존 프로젝트의 widgets도 계속 검사한다
-      'widgets/header/ui/Header.tsx': "import { UserCard } from '@/entities/user'\n",
+      'pages/HomePage.tsx': "import { authStore } from '@/features/auth/model/store'\n",
+      'pages/CartPage.tsx': "import { Cart } from '@/features/cart'\n",
     })
 
     const { out } = cli(['check', '--target', d])
     assert.match(out, /deep import/)
-    assert.ok(!out.includes('Header.tsx'))
+    assert.ok(!out.includes('CartPage.tsx'))
   }))
 
-test('check: 스캐폴드하지 않는 레거시 widgets도 의존 방향·슬라이스 격리를 검사한다', () =>
+test('check: 평평한 파일의 co-location과 레이어 루트 배럴은 오탐하지 않는다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, {
-      'features/cart/ui/Cart.tsx': "import { Header } from '@/widgets/header'\n",
-      'widgets/header/ui/Header.tsx': "import { Footer } from '@/widgets/footer'\n",
-      'pages/home/ui/Home.tsx': "import { Header } from '@/widgets/header/ui/Header'\n",
-    })
-
-    const { code, out } = cli(['check', '--target', d])
-    assert.equal(code, 1)
-    assert.match(out, /features 는 widgets 를 참조할 수 없다/)
-    assert.match(out, /다른 슬라이스 직접 import — widgets\/footer/)
-    assert.match(out, /deep import — 공개 API\(widgets\/header\)/)
-  }))
-
-test('check: pages도 슬라이스 격리 — 옆 페이지 직접 import를 잡는다', () =>
-  withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
-    withAlias(d)
-    writeSrc(d, { 'pages/home/ui/Home.tsx': "import { AboutPage } from '@/pages/about'\n" })
-
-    const { code, out } = cli(['check', '--target', d])
-    assert.equal(code, 1)
-    assert.match(out, /다른 슬라이스 직접 import — pages\/about/)
-  }))
-
-test('check: 평평한 페이지 파일의 co-location과 레이어 루트 배럴은 오탐하지 않는다', () =>
-  withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
-    withAlias(d)
-    writeSrc(d, {
-      'pages/HomePage.tsx': "import { styles } from './HomePage.styles'\n",
-      'pages/HomePage.styles.ts': 'export const styles = {}\n',
-      'pages/HomePage.test.tsx': "import { HomePage } from './HomePage'\n",
-      'pages/index.ts': "export { HomePage } from './HomePage'\nexport { AboutPage } from './about'\n",
-      'app/router.tsx': "import { HomePage } from '@/pages'\n",
+      'features/Cart.tsx': "import { styles } from './Cart.styles'\n",
+      'features/Cart.styles.ts': 'export const styles = {}\n',
+      'features/Cart.test.tsx': "import { Cart } from './Cart'\n",
+      'features/index.ts': "export { Cart } from './Cart'\nexport { Like } from './like'\n",
+      'pages/HomePage.tsx': "import { Cart } from '@/features'\n",
     })
 
     const { code, out } = cli(['check', '--target', d])
@@ -430,34 +387,32 @@ test('check: 평평한 페이지 파일의 co-location과 레이어 루트 배�
 
 test('check: 배럴이 아닌 index 파일과 점이 든 디렉터리 슬라이스는 그대로 검사한다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, {
-      'pages/index.tsx': "import { AboutPage } from './about'\n",
       'features/index.service.ts': "import { login } from './auth'\n",
       'features/user.profile/index.ts': 'export const Profile = null\n',
       'features/user/ui/User.tsx': "import { Profile } from '@/features/user.profile'\n",
     })
 
     const { out } = cli(['check', '--target', d])
-    assert.match(out, /pages\/index\.tsx/)
     assert.match(out, /features\/index\.service\.ts/)
     assert.match(out, /다른 슬라이스 직접 import — features\/user\.profile/)
   }))
 
 test('check: 정상 코드는 위반 0건 — 상대경로·shared 내부·외부 패키지는 오탐하지 않는다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, {
       'features/cart/ui/CartButton.tsx': [
         "import { useQuery } from '@tanstack/react-query'",
         "import { Button } from '@/shared/ui/button/Button'",
         "import { addToCart } from '../model/store'",
-        "import { ProductCard } from '@/entities/product'",
         '',
       ].join('\n'),
       'features/cart/model/store.ts': 'export const addToCart = () => {}\n',
+      'pages/CartPage.tsx': "import { CartButton } from '@/features/cart'\n",
     })
 
     const { code, out } = cli(['check', '--target', d])
@@ -482,17 +437,16 @@ test('check: layered는 같은 계층 참조를 허용하고 방향 역전만 �
 
 test('check: 여러 줄 import도 줄 번호를 정확히 보고한다', () =>
   withTmp((d) => {
-    cli(['scaffold', 'fsd', '--target', d])
+    cli(['scaffold', 'feature-based', '--target', d])
     withAlias(d)
     writeSrc(d, {
-      'entities/user/model/store.ts': ['export const a = 1', '', 'import {', '  LoginForm,', "} from '@/features/auth'", ''].join('\n'),
+      'features/auth/model/store.ts': ['export const a = 1', '', 'import {', '  HomePage,', "} from '@/pages/home'", ''].join('\n'),
     })
 
     const { out } = cli(['check', '--target', d])
     assert.match(out, /store\.ts:5/)
   }))
 
-// ---- status ----
 test('status shows intact then modified', () =>
   withTmp((d) => {
     cli(['add', 'ts', '--target', d])
@@ -515,7 +469,6 @@ test('install records installedBy = current package version', () =>
 test('status hints update when installed version is older', () =>
   withTmp((d) => {
     cli(['add', 'ts', '--target', d])
-    // 오래된 버전으로 설치한 것처럼 매니페스트를 바꿔둔다.
     const mfPath = path.join(d, '.claude/.my-fe-harness-manifest.json')
     const m = JSON.parse(fs.readFileSync(mfPath, 'utf8'))
     m.installedBy = '0.0.1'
@@ -525,12 +478,10 @@ test('status hints update when installed version is older', () =>
     assert.match(out, /update/)
   }))
 
-// ---- update ----
 test('update refreshes an unmodified stale rule to latest source', () =>
   withTmp((d) => {
     const rulesDir = path.join(d, '.claude/rules')
     fs.mkdirSync(rulesDir, { recursive: true })
-    // 구버전 설치본 + 그 해시를 매니페스트에 기록(사용자 미수정 상태를 흉내).
     const dest = path.join(rulesDir, 'typescript.md')
     fs.writeFileSync(dest, '# 구버전\n')
     fs.writeFileSync(
@@ -569,7 +520,6 @@ test('update preserves user-modified rule', () =>
     assert.equal(fs.readFileSync(dest, 'utf8'), before, '수정본 그대로')
   }))
 
-// ---- 매니페스트 ----
 test('install records sha256 manifest for written rules', () =>
   withTmp((d) => {
     cli(['add', 'ts', '--target', d])
@@ -577,7 +527,6 @@ test('install records sha256 manifest for written rules', () =>
     assert.equal(m.rules['typescript.md'], hashFile(path.join(d, '.claude/rules/typescript.md')))
   }))
 
-// ---- uninstall ----
 test('uninstall removes tracked rules + manifest', () =>
   withTmp((d) => {
     cli(['add', 'core', 'react', '--target', d])
@@ -655,14 +604,12 @@ test('uninstall preserves user-modified guard script', () =>
     assert.ok(fs.existsSync(script), '수정된 가드 스크립트는 보존')
   }))
 
-// guard가 기존 스크립트를 kept(미갱신)할 때 매니페스트는 소스가 아니라 디스크 해시를 기록해야
-// 이후 uninstall이 그 스크립트를 올바르게 제거한다(패키지 업데이트로 소스 해시가 바뀌어도).
 test('uninstall removes a kept (pre-existing) guard script via disk hash', () =>
   withTmp((d) => {
     const script = path.join(d, '.claude/hooks/safety-guard.mjs')
     fs.mkdirSync(path.dirname(script), { recursive: true })
     fs.writeFileSync(script, '// 구버전 가드 스크립트\n')
-    cli(['guard', '--target', d]) // 존재 → kept, 매니페스트엔 디스크 해시 기록
+    cli(['guard', '--target', d])
     cli(['uninstall', '--target', d])
     assert.ok(!fs.existsSync(script), 'kept 스크립트도 매니페스트 해시와 일치하면 제거')
   }))
@@ -677,13 +624,11 @@ test('uninstall --global removes from sandboxed ~/.claude', () =>
     assert.ok(!fs.existsSync(path.join(home, '.claude/hooks/safety-guard.mjs')))
   }))
 
-// ---- 보안: 매니페스트 변조 경로 탈출 차단 ----
 test('uninstall refuses to delete files outside .claude via tampered manifest', () =>
   withTmp((d) => {
     cli(['add', 'ts', '--target', d])
     const victim = path.join(d, 'IMPORTANT.txt')
     fs.writeFileSync(victim, 'do not delete')
-    // 매니페스트를 변조: rules 밖(../../IMPORTANT.txt)을 정확한 해시로 겨냥.
     const mfPath = path.join(d, '.claude/.my-fe-harness-manifest.json')
     const m = JSON.parse(fs.readFileSync(mfPath, 'utf8'))
     m.rules['../../IMPORTANT.txt'] = hashFile(victim)
@@ -693,7 +638,6 @@ test('uninstall refuses to delete files outside .claude via tampered manifest', 
     assert.match(out, /경로 밖/)
   }))
 
-// ---- AGENTS.md 규칙 블록 (Codex 등) ----
 const AGENTS_START = '<!-- my-fe-harness:start -->'
 const agentsMd = (d) => path.join(d, 'AGENTS.md')
 const readAgents = (d) => fs.readFileSync(agentsMd(d), 'utf8')
@@ -801,7 +745,6 @@ test('--global honors CODEX_HOME', () =>
     assert.ok(!fs.existsSync(path.join(home, '.codex')))
   }))
 
-// 마커 밖은 그대로 복원된다. 예외: 개행 없이 끝난 파일은 마지막 줄 개행 하나가 붙는다(구분자를 기록하지 않으므로).
 test('AGENTS.md: add→uninstall restores user content (whitespace·CRLF kept)', () =>
   withTmp((d) => {
     for (const original of ['# 메모\n', '# 메모\n\n', 'a\r\nb\r\n', '# 메모', '# 메모\n\n\n  ']) {

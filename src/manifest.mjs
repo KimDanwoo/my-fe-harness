@@ -3,17 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// 설치 매니페스트: 우리가 쓴 파일의 sha256을 기록한다.
-// uninstall은 이 해시와 현재 파일이 일치할 때만 삭제해 사용자 수정본을 보존한다.
 export const MANIFEST_NAME = '.my-fe-harness-manifest.json'
 export const MANIFEST_VERSION = 1
 
-// 설치 스코프(전역/프로젝트)에 맞는 .claude 디렉토리. 모든 명령이 이 한 경로를 공유한다.
 export function resolveClaudeDir({ targetDir, global = false }) {
   return path.join(global ? os.homedir() : targetDir, '.claude')
 }
 
-// 매니페스트는 .claude/ 아래에 둔다(규칙·훅 양쪽을 함께 추적).
 export function manifestPath(claudeDir) {
   return path.join(claudeDir, MANIFEST_NAME)
 }
@@ -26,8 +22,6 @@ export function hashFile(file) {
   return sha256(fs.readFileSync(file))
 }
 
-// 원자적 쓰기: 같은 디렉토리에 임시 파일로 쓴 뒤 rename 한다.
-// 쓰기 도중 중단돼도 대상 파일(설정·매니페스트)이 반쯤 쓰인 상태로 손상되지 않는다.
 export function writeFileAtomic(file, content) {
   const tmp = `${file}.${process.pid}.tmp`
   fs.writeFileSync(tmp, content)
@@ -49,6 +43,7 @@ export function readManifest(claudeDir) {
       verifyGate: data.verifyGate ?? null,
       verifySkill: data.verifySkill ? { files: plainObject(data.verifySkill.files) } : null,
       agents: agentsRecord(data.agents),
+      project: projectRecord(data.project),
     }
   } catch {
     throw new Error(`${file} 파싱 실패 — 손상된 매니페스트. 수동 확인 후 다시 시도하세요.`)
@@ -61,21 +56,31 @@ export function writeManifest(claudeDir, manifest) {
 }
 
 function emptyManifest() {
-  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null, lintHook: null, verifyGate: null, verifySkill: null, agents: null }
+  return { version: MANIFEST_VERSION, installedBy: null, rules: {}, files: {}, hook: null, lintHook: null, verifyGate: null, verifySkill: null, agents: null, project: null }
 }
 
-// AGENTS.md 블록 소유 기록. 형식이 어긋나면 기록 없음으로 취급(블록을 우리 것으로 오인하지 않는다).
 function agentsRecord(value) {
-  if (!value || typeof value.sha !== 'string') return null
+  const hasSha = typeof value?.sha === 'string'
+  if (!hasSha) return null
   return { file: typeof value.file === 'string' ? value.file : null, sha: value.sha, created: value.created === true }
 }
 
-// 변조된 매니페스트가 배열·문자열을 넣어도 안전하게 빈 객체로 취급.
-function plainObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+function projectRecord(value) {
+  const isRecord = Boolean(value) && typeof value === 'object'
+  if (!isRecord) return null
+  const packageJson = value.packageJson
+  const isPackageRecord = typeof packageJson?.file === 'string'
+  return {
+    files: plainObject(value.files),
+    packageJson: isPackageRecord ? { file: packageJson.file, devDependencies: plainObject(packageJson.devDependencies), scripts: plainObject(packageJson.scripts) } : null,
+  }
 }
 
-// 보안: 해석된 경로가 base 디렉토리 내부인지 검증(경로 탈출 차단).
+function plainObject(value) {
+  const isPlainObject = Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  return isPlainObject ? value : {}
+}
+
 export function isInside(base, target) {
   const rel = path.relative(base, target)
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
