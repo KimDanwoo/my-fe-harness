@@ -10,10 +10,14 @@ const FUNCTION_EXPRESSIONS = new Set(['ArrowFunctionExpression', 'FunctionExpres
 const EXPORT_DECLARATIONS = new Set(['ExportNamedDeclaration', 'ExportDefaultDeclaration'])
 
 const isFunctionExpression = (node) => FUNCTION_EXPRESSIONS.has(node?.type)
+const isComponentBinding = (id) => id.type === 'Identifier' && COMPONENT_NAME.test(id.name)
+const isBelowTopLevel = (node) => Boolean(node.parent) && node.parent.type !== 'Program'
+const isObjectOfMember = (node) => node.parent?.type === 'MemberExpression' && node.parent.object === node
 
 function calleeName(callee) {
   if (callee.type === 'Identifier') return callee.name
-  if (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && !callee.computed) return callee.property.name
+  const isStaticMemberOfIdentifier = callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && !callee.computed
+  if (isStaticMemberOfIdentifier) return callee.property.name
   return null
 }
 
@@ -28,7 +32,7 @@ export function componentFunctionsOf(statement) {
   const declaration = EXPORT_DECLARATIONS.has(statement.type) ? statement.declaration : statement
   if (declaration?.type === 'FunctionDeclaration') return COMPONENT_NAME.test(declaration.id?.name ?? '') ? [declaration] : []
   if (declaration?.type !== 'VariableDeclaration') return []
-  return declaration.declarations.flatMap(({ id, init }) => (id.type === 'Identifier' && COMPONENT_NAME.test(id.name) ? functionsOfInitializer(init) : []))
+  return declaration.declarations.flatMap(({ id, init }) => (isComponentBinding(id) ? functionsOfInitializer(init) : []))
 }
 
 export function bodyProblemOf(name) {
@@ -38,7 +42,8 @@ export function bodyProblemOf(name) {
 }
 
 function declaredFunctions(statement) {
-  if (statement.type === 'FunctionDeclaration' && statement.id) return [{ name: statement.id.name, node: statement }]
+  const isNamedFunction = statement.type === 'FunctionDeclaration' && Boolean(statement.id)
+  if (isNamedFunction) return [{ name: statement.id.name, node: statement }]
   if (statement.type !== 'VariableDeclaration') return []
   return statement.declarations
     .filter(({ id, init }) => id.type === 'Identifier' && isFunctionExpression(init))
@@ -55,7 +60,7 @@ export function isEffectCall(node) {
 
 function topLevelStatementOf(node) {
   let current = node
-  while (current.parent && current.parent.type !== 'Program') current = current.parent
+  while (isBelowTopLevel(current)) current = current.parent
   return current.parent ? current : null
 }
 
@@ -104,7 +109,8 @@ const noDirectEffect = {
     if (EFFECT_ALLOWED_FILE.test(filenameOf(context))) return {}
     return {
       CallExpression(node) {
-        if (isEffectCall(node) && isInsideComponent(node)) context.report({ node, messageId: 'directEffect' })
+        const isEffectInComponent = isEffectCall(node) && isInsideComponent(node)
+        if (isEffectInComponent) context.report({ node, messageId: 'directEffect' })
       },
     }
   },
@@ -131,7 +137,8 @@ const isSubscriptionCall = (node) => {
 const childNodesOf = (value) => (Array.isArray(value) ? value : [value]).filter((item) => typeof item?.type === 'string')
 
 export function subscriptionsIn(node) {
-  if (typeof node?.type !== 'string' || isFunctionExpression(node)) return []
+  const shouldStopDescending = typeof node?.type !== 'string' || isFunctionExpression(node)
+  if (shouldStopDescending) return []
   const own = isSubscriptionCall(node) ? [hookNameOf(node)] : []
   const nested = Object.entries(node).flatMap(([key, value]) => (key === 'parent' ? [] : childNodesOf(value).flatMap(subscriptionsIn)))
   return [...own, ...nested]
@@ -146,14 +153,15 @@ function jsxRootName(name) {
 
 function outermostMemberOf(identifier) {
   let current = identifier
-  while (current.parent?.type === 'MemberExpression' && current.parent.object === current) current = current.parent
+  while (isObjectOfMember(current)) current = current.parent
   return current
 }
 
 function passedPropTarget(reference, component) {
   if (reference.from.variableScope.block !== component) return null
   const container = outermostMemberOf(reference.identifier).parent
-  if (container?.type !== 'JSXExpressionContainer' || container.parent?.type !== 'JSXAttribute') return null
+  const isJsxAttributeValue = container?.type === 'JSXExpressionContainer' && container.parent?.type === 'JSXAttribute'
+  if (!isJsxAttributeValue) return null
   return jsxRootName(container.parent.parent.name)
 }
 
@@ -163,7 +171,8 @@ function importSourcesOf(program) {
 }
 
 export function isDomainComponent(name, importSources) {
-  if (!COMPONENT_NAME.test(name ?? '') || CONTEXT_COMPONENT.test(name)) return false
+  const isPlainComponentName = COMPONENT_NAME.test(name ?? '') && !CONTEXT_COMPONENT.test(name)
+  if (!isPlainComponentName) return false
   const source = importSources.get(name)
   return source === undefined || DOMAIN_SOURCE.test(source)
 }
@@ -178,7 +187,8 @@ function passThroughTargets(variables, component, importSources) {
 export function passThroughProblem({ hooks, targets }) {
   if (!targets) return null
   if (hooks.some(isStoreHook)) return 'storePassThrough'
-  if (hooks.some(isSubscribingHook) && targets.length === 1) return 'hookPassThrough'
+  const isSingleSubscriptionRelay = hooks.some(isSubscribingHook) && targets.length === 1
+  if (isSingleSubscriptionRelay) return 'hookPassThrough'
   return null
 }
 
@@ -234,7 +244,8 @@ function componentsOf(program) {
 
 function typeLiteralCount(declaration) {
   if (declaration?.type === 'TSInterfaceDeclaration') return declaration.body.body.length
-  if (declaration?.type === 'TSTypeAliasDeclaration' && declaration.typeAnnotation.type === 'TSTypeLiteral') return declaration.typeAnnotation.members.length
+  const isObjectTypeAlias = declaration?.type === 'TSTypeAliasDeclaration' && declaration.typeAnnotation.type === 'TSTypeLiteral'
+  if (isObjectTypeAlias) return declaration.typeAnnotation.members.length
   return null
 }
 
@@ -251,7 +262,8 @@ export function propsTypeCounts(program) {
 export function propsCountOf(component, counts) {
   const type = component.params[0]?.typeAnnotation?.typeAnnotation
   if (type?.type === 'TSTypeLiteral') return type.members.length
-  if (type?.type === 'TSTypeReference' && type.typeName.type === 'Identifier') return counts.get(type.typeName.name) ?? null
+  const isNamedTypeReference = type?.type === 'TSTypeReference' && type.typeName.type === 'Identifier'
+  if (isNamedTypeReference) return counts.get(type.typeName.name) ?? null
   return null
 }
 
@@ -271,7 +283,8 @@ const maxProps = {
         const counts = propsTypeCounts(program)
         for (const { node, name } of componentsOf(program)) {
           const count = propsCountOf(node, counts)
-          if (count !== null && count > max) context.report({ node, messageId: 'tooManyProps', data: { name, count, max } })
+          const hasTooManyProps = count !== null && count > max
+          if (hasTooManyProps) context.report({ node, messageId: 'tooManyProps', data: { name, count, max } })
         }
       },
     }
@@ -318,7 +331,8 @@ const componentMarkup = {
       Program(program) {
         for (const { node, name } of componentsOf(program)) {
           const { depth, hostElements } = markupOf(node)
-          if (depth <= maxDepth && hostElements <= maxHostElements) continue
+          const isWithinLimits = depth <= maxDepth && hostElements <= maxHostElements
+          if (isWithinLimits) continue
           context.report({ node, messageId: 'tooMuchMarkup', data: { name, depth, maxDepth, hostElements, maxHostElements } })
         }
       },
@@ -337,7 +351,8 @@ const sourceOf = (node) => node.source ?? node.argument?.literal
 
 export function staticSpecifier(source) {
   if (source?.type === 'Literal') return typeof source.value === 'string' ? source.value : null
-  if (source?.type === 'TemplateLiteral' && source.expressions.length === 0) return source.quasis[0].value.cooked
+  const isStaticTemplate = source?.type === 'TemplateLiteral' && source.expressions.length === 0
+  if (isStaticTemplate) return source.quasis[0].value.cooked
   return null
 }
 const aliasRootsByDir = new Map()
@@ -453,9 +468,61 @@ const noComment = {
   },
 }
 
+const CONDITION_JOINERS = new Set(['&&', '||'])
+const COMPARISON_OPERATORS = new Set(['===', '!==', '==', '!=', '<', '>', '<=', '>=', 'instanceof', 'in'])
+const BOOLEAN_NAME = /^(?:is|has|should|can)[A-Z]/
+const CONDITION_HOLDERS = ['IfStatement', 'ConditionalExpression', 'WhileStatement', 'DoWhileStatement']
+
+const isNegation = (node) => node.type === 'UnaryExpression' && node.operator === '!'
+const withoutNegation = (node) => (isNegation(node) ? withoutNegation(node.argument) : node)
+
+export const isCompoundCondition = (node) => {
+  const condition = withoutNegation(node)
+  return condition.type === 'LogicalExpression' && CONDITION_JOINERS.has(condition.operator)
+}
+
+const isComparison = (node) => node.type === 'BinaryExpression' && COMPARISON_OPERATORS.has(node.operator)
+
+export const isConditionValue = (node) => isCompoundCondition(node) || isComparison(withoutNegation(node))
+
+function declaredInitOf(scope, name) {
+  for (let current = scope; current; current = current.upper) {
+    const variable = current.set.get(name)
+    if (variable) return variable.defs[0]?.node?.init ?? null
+  }
+  return null
+}
+
+const namedCondition = {
+  meta: {
+    type: 'suggestion',
+    schema: [],
+    messages: {
+      compoundCondition: '조건을 &&·||로 이어 바로 쓰지 않는다. const isXxx = … 처럼 의미가 드러나는 이름의 변수로 빼서 쓴다.',
+      conditionName: "'{{name}}': 조건을 담는 변수는 is·has·should·can으로 시작하는 이름을 쓴다.",
+    },
+  },
+  create(context) {
+    const sourceCode = context.sourceCode ?? context.getSourceCode()
+    const checkName = (test) => {
+      const shouldCheckName = test.type === 'Identifier' && !BOOLEAN_NAME.test(test.name)
+      if (!shouldCheckName) return
+      const init = declaredInitOf(sourceCode.getScope(test), test.name)
+      const isHoldingCondition = Boolean(init) && isConditionValue(init)
+      if (isHoldingCondition) context.report({ node: test, messageId: 'conditionName', data: { name: test.name } })
+    }
+    const check = ({ test }) => {
+      if (isCompoundCondition(test)) return context.report({ node: test, messageId: 'compoundCondition' })
+      checkName(withoutNegation(test))
+    }
+    return Object.fromEntries(CONDITION_HOLDERS.map((type) => [type, check]))
+  },
+}
+
 export default {
   rules: {
     'no-comment': noComment,
+    'named-condition': namedCondition,
     'component-body': componentBody,
     'no-direct-effect': noDirectEffect,
     'no-store-passthrough': noStorePassthrough,

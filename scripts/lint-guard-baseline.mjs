@@ -74,7 +74,7 @@ export function harnessBaseline(configs = []) {
         'max-lines-per-function': ['error', { max: MAX_FUNCTION_LINES, ...LENGTH_OPTIONS }],
       },
     },
-    { files: CODE_FILES, plugins: { harness: plugin }, rules: harnessRules({ 'harness/no-comment': ['error', { allow: TOOL_DIRECTIVES }] }) },
+    { files: CODE_FILES, plugins: { harness: plugin }, rules: harnessRules({ 'harness/no-comment': ['error', { allow: TOOL_DIRECTIVES }], 'harness/named-condition': 'error' }) },
     { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
     { files: COMPONENT_FILES, plugins: { harness: plugin }, rules: harnessRules(COMPONENT_BODY_RULES) },
     {

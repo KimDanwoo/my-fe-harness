@@ -52,6 +52,10 @@ const canPurchase = isAdult(user) && isKorean(user) && !user.banned
 if (canPurchase) { ... }
 ```
 
+- `if`·삼항·`while` 조건에 `&&`·`||`를 바로 쓰지 않는다. 조건이 하나(`if (!sheet)`, `if (phase !== PHASE.idle)`)면 그대로 둔다.
+- 조건을 담는 변수는 `is`·`has`·`should`·`can`으로 시작한다. `const ok = a && b`처럼 의미 없는 이름은 막힌다.
+- `harness/named-condition`이 기본 잠금에서 강제한다. 자동 수정은 없다 — 이름은 의미를 아는 사람이 짓는다.
+
 ## 분기보다 매핑 — 컴포지션
 
 ```tsx
