@@ -331,7 +331,15 @@ const JSONC_NOISE = /("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\/|,(?=\s*[}\]
 const ALIAS_CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json']
 const ALIAS_WILDCARD = '/*'
 const TARGET_WILDCARD = /(?:^|\/)\*$/
-const IMPORT_NODES = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']
+const IMPORT_NODES = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression', 'TSImportType']
+
+const sourceOf = (node) => node.source ?? node.argument?.literal
+
+export function staticSpecifier(source) {
+  if (source?.type === 'Literal') return typeof source.value === 'string' ? source.value : null
+  if (source?.type === 'TemplateLiteral' && source.expressions.length === 0) return source.quasis[0].value.cooked
+  return null
+}
 const aliasRootsByDir = new Map()
 
 export function parseJsonc(text) {
@@ -392,12 +400,14 @@ const noRelativeImport = {
     if (!path.isAbsolute(importer)) return {}
     const roots = aliasRootsNear(path.dirname(importer))
     if (roots.length === 0) return {}
-    const check = ({ source }) => {
-      const specifier = source?.value
-      if (typeof specifier !== 'string') return
+    const sourceCode = context.sourceCode ?? context.getSourceCode()
+    const check = (node) => {
+      const source = sourceOf(node)
+      const specifier = staticSpecifier(source)
+      if (specifier === null) return
       const aliasPath = aliasPathFor(importer, specifier, roots)
       if (!aliasPath) return
-      const quote = source.raw?.[0] ?? "'"
+      const quote = sourceCode.getText(source)[0]
       context.report({
         node: source,
         messageId: 'relativeImport',
