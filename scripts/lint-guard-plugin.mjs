@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 const COMPONENT_NAME = /^[A-Z][A-Za-z0-9]*$/
 const HANDLER_NAME = /^(?:handle|on)[A-Z]/
 const EFFECT_HOOK = /^(?:useEffect|useLayoutEffect)$/
@@ -323,6 +326,89 @@ const componentMarkup = {
   },
 }
 
+const RELATIVE_SPECIFIER = /^\.{1,2}(?:\/|$)/
+const JSONC_NOISE = /("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\/|,(?=\s*[}\]])/g
+const ALIAS_CONFIG_NAMES = ['tsconfig.json', 'jsconfig.json']
+const ALIAS_WILDCARD = '/*'
+const TARGET_WILDCARD = /(?:^|\/)\*$/
+const IMPORT_NODES = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression']
+const aliasRootsByDir = new Map()
+
+export function parseJsonc(text) {
+  try {
+    return JSON.parse(text.replace(JSONC_NOISE, (_, string) => string ?? ''))
+  } catch {
+    return null
+  }
+}
+
+const isWildcardEntry = ([alias, targets]) => alias.endsWith(ALIAS_WILDCARD) && Array.isArray(targets) && TARGET_WILDCARD.test(String(targets[0]))
+
+export function aliasRootsOf(config, configDir) {
+  const options = config?.compilerOptions ?? {}
+  const base = path.resolve(configDir, options.baseUrl ?? '.')
+  return Object.entries(options.paths ?? {})
+    .filter(isWildcardEntry)
+    .map(([alias, [target]]) => ({ prefix: alias.slice(0, -1), dir: path.resolve(base, target.slice(0, -1)) }))
+    .sort((left, right) => right.dir.length - left.dir.length)
+}
+
+function readAliasRoots(dir) {
+  const config = ALIAS_CONFIG_NAMES.map((name) => path.join(dir, name)).find((file) => fs.existsSync(file))
+  if (config) return aliasRootsOf(parseJsonc(fs.readFileSync(config, 'utf8')), dir)
+  const parent = path.dirname(dir)
+  return parent === dir ? [] : aliasRootsNear(parent)
+}
+
+function aliasRootsNear(dir) {
+  if (!aliasRootsByDir.has(dir)) aliasRootsByDir.set(dir, readAliasRoots(dir))
+  return aliasRootsByDir.get(dir)
+}
+
+function isInside(file, dir) {
+  const relative = path.relative(dir, file)
+  return relative !== '' && !path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..'
+}
+
+export function aliasPathFor(importer, specifier, roots) {
+  if (!RELATIVE_SPECIFIER.test(specifier)) return null
+  const rootOf = (file) => roots.find(({ dir }) => isInside(file, dir))
+  if (!rootOf(importer)) return null
+  const target = path.resolve(path.dirname(importer), specifier)
+  const root = rootOf(target)
+  if (!root) return null
+  return `${root.prefix}${path.relative(root.dir, target).split(path.sep).join('/')}`
+}
+
+const noRelativeImport = {
+  meta: {
+    type: 'suggestion',
+    fixable: 'code',
+    schema: [],
+    messages: { relativeImport: "'{{specifier}}': 상대경로 대신 별칭 전체 경로로 가져온다 → '{{aliasPath}}'" },
+  },
+  create(context) {
+    const importer = filenameOf(context)
+    if (!path.isAbsolute(importer)) return {}
+    const roots = aliasRootsNear(path.dirname(importer))
+    if (roots.length === 0) return {}
+    const check = ({ source }) => {
+      const specifier = source?.value
+      if (typeof specifier !== 'string') return
+      const aliasPath = aliasPathFor(importer, specifier, roots)
+      if (!aliasPath) return
+      const quote = source.raw?.[0] ?? "'"
+      context.report({
+        node: source,
+        messageId: 'relativeImport',
+        data: { specifier, aliasPath },
+        fix: (fixer) => fixer.replaceText(source, `${quote}${aliasPath}${quote}`),
+      })
+    }
+    return Object.fromEntries(IMPORT_NODES.map((type) => [type, check]))
+  },
+}
+
 export default {
   rules: {
     'component-body': componentBody,
@@ -330,5 +416,6 @@ export default {
     'no-store-passthrough': noStorePassthrough,
     'max-props': maxProps,
     'component-markup': componentMarkup,
+    'no-relative-import': noRelativeImport,
   },
 }

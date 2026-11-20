@@ -18,7 +18,9 @@ const COMPONENT_BODY_RULES = {
   'harness/max-props': 'error',
   'harness/component-markup': 'error',
 }
-const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
+const ALIAS_IMPORT_FILES = ['**/*.{js,jsx,ts,tsx}']
+const ALIAS_IMPORT_EXEMPT = ['**/*.config.*', '**/*.d.ts']
+const COMPONENT_BODY_RULES_OFF =Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
 const TESTS = ['**/__tests__/**', '**/*.test.*', '**/*.spec.*', '**/e2e/**']
 const COMPONENTS_AND_HOOKS = ['**/*.tsx', '**/*.jsx', '**/use[A-Z]*.{ts,js,mts,mjs}']
 const GENERATED_AND_VENDOR = [
@@ -59,6 +61,7 @@ export function harnessBaseline(projectConfigs) {
     },
     { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
     { files: COMPONENT_FILES, plugins: { harness }, rules: COMPONENT_BODY_RULES },
+    { files: ALIAS_IMPORT_FILES, ignores: ALIAS_IMPORT_EXEMPT, plugins: { harness }, rules: { 'harness/no-relative-import': 'error' } },
     { files: COMPONENT_FILES, rules: { 'max-lines': ['error', { max: MAX_COMPONENT_FILE_LINES, ...LENGTH_OPTIONS }] } },
     { files: NUMBER_HOMES, rules: magicNumbersOff },
     { files: TESTS, rules: { ...magicNumbersOff, ...COMPONENT_BODY_RULES_OFF, 'max-lines-per-function': 'off' } },
