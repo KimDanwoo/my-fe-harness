@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-20
+
 ### Added
 
 - **FSD 구조 잠금 `fsd(options)`** — labs에만 있던 FSD 규칙(`fsd/independent-slices`·`public-api`·`slice-structure`·`component-file`, 옵션으로 `routing-location`·`entity-state`)을
@@ -26,6 +28,9 @@
 - **props 개수·덩어리 마크업 잠금** — 플러그인에 `harness/max-props`(컴포넌트 props 6개 이상 금지, 인라인 타입·같은 파일의 interface/type을 센다,
   `extends`로 받은 기본 속성은 세지 않음)와 `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)을 추가하고 기본 잠금이 `*.tsx`·`*.jsx`에 켠다.
   중간 컴포넌트가 상태를 props로 릴레이하거나 화면 하나에 마크업을 쌓는 대신 합성 컴포넌트(Root + 파트, children 조립)로 나누게 한다. 한도는 옵션으로 바꿀 수 있다.
+- **store 중계 금지 잠금** — 플러그인에 `harness/no-store-passthrough`를 추가하고 기본 잠금이 `*.tsx`·`*.jsx`에 켠다.
+  store를 구독한 컴포넌트가 그 값을 쓰지 않고 자식에게 props로 넘기기만 하면 막는다 — 구독은 값을 쓰는 자식에서 한다.
+
 - **컴포넌트 본문 규칙(ESLint 플러그인 `harness`)** — `scripts/lint-guard-plugin.mjs`(의존성 0)가 `harness/component-body`(컴포넌트 본문 최상위에는
   `handleXxx`·`onXxx`만 함수로, 중첩 컴포넌트 금지)와 `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지, `error.tsx`·`global-error.tsx` 허용)를 제공한다.
   기본 잠금이 `*.tsx`·`*.jsx`에 error로 켠다(테스트 파일 제외). 프로젝트 설정 아래 덧씌움·런타임 설정 모두에서 동작하고, `lint-guard` 설치가
@@ -54,13 +59,6 @@
   `uninstall`·`status`도 이 훅을 다룬다.
   전역 사본이 있으면 프로젝트·플러그인 사본은 양보한다(중복 검사 방지).
 
-### Fixed
-
-- **lint-guard가 ESLint 일괄 억제를 따라 부채를 놓침** — 프로젝트에 `eslint-suppressions.json`이 있으면 훅이 실행하는 ESLint CLI도 그 억제를 적용해,
-  Claude가 부채 파일을 고쳐도 남은 위반을 잡지 못했다. 억제 파일이 있는 프로젝트에서는 빈 억제 파일을 `--suppressions-location`으로 넘긴다.
-- **`--global` 훅 경로** — exec 형식(`args`)은 셸이 없어 `${HOME}`이 펼쳐지지 않는다. 전역 설치(`guard`·`lint-guard`)는
-  셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
-
 ### Changed
 
 - **하네스 코드도 기본 잠금을 지킨다** — 복잡도 10 초과 함수·중첩 삼항·매직넘버 38건을 함수 분리·상수로 정리(동작 동일).
@@ -78,6 +76,15 @@
   다른 import가 깨지지 않는다. 별칭으로 세그먼트까지 들어가는 건 같은 슬라이스 안에서만 허용하고, 경계는
   `import-x/no-restricted-paths`(위치 기반)로 지키도록 적었다. **기본 규칙이 바뀌므로**, 상대경로를 유지하려면
   설치된 `fsd.md`·`typescript.md`를 직접 고쳐 두면 `update`가 보존한다.
+
+- **FSD 규칙 팩 적용 조건** — `rules/fsd.md` 맨 위에 "FSD 레이어를 쓰는 프로젝트에만" 조건을 둔다. `paths: src/**/*`라 Astro 같은 비FSD 프로젝트에서도 켜졌다.
+
+### Fixed
+
+- **lint-guard가 ESLint 일괄 억제를 따라 부채를 놓침** — 프로젝트에 `eslint-suppressions.json`이 있으면 훅이 실행하는 ESLint CLI도 그 억제를 적용해,
+  Claude가 부채 파일을 고쳐도 남은 위반을 잡지 못했다. 억제 파일이 있는 프로젝트에서는 빈 억제 파일을 `--suppressions-location`으로 넘긴다.
+- **`--global` 훅 경로** — exec 형식(`args`)은 셸이 없어 `${HOME}`이 펼쳐지지 않는다. 전역 설치(`guard`·`lint-guard`)는
+  셸 형식 `node "$HOME/.claude/hooks/…"`으로 쓰고, 이미 셸 형식으로 등록된 훅도 알아봐 중복 추가하지 않는다.
 
 ## [0.4.0] - 2026-11-17
 
