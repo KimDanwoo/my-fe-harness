@@ -26,8 +26,11 @@ const SHARED_ITEM_DEPTH = 2
 const CROSS_IMPORT_FOLDER = '@x'
 const CROSS_IMPORT_DEPTH = 2
 const CROSS_IMPORT_ROLE = 'entities'
-const CROSS_IMPORT_TARGET = /^(?!index(?:\.|$))([^.]+)(?:\.tsx?)?$/
-const CROSS_IMPORT_FILE = /^(?!index\.)[^.]+\.tsx?$/
+const CROSS_IMPORT_NAME = '(?!index(?:\\.|$))[^.]+'
+const CROSS_IMPORT_TARGET = new RegExp(`^(${CROSS_IMPORT_NAME})(?:\\.tsx?)?$`)
+const CROSS_IMPORT_FILE = new RegExp(`^${CROSS_IMPORT_NAME}\\.tsx?$`)
+const STATIC_ASSET_FILE = /\.(?![cm]?[jt]sx?$)[A-Za-z0-9]+$/
+const ASSETS_HOLD_FILES_ONLY = 'assets/에는 정적 자산(이미지·폰트 등)만 둔다. 코드는 lib/·config/로 옮긴다.'
 
 const toPosix = (file) => file.replaceAll('\\', '/')
 
@@ -122,7 +125,7 @@ const isCrossImportFor = (from, to) => from?.role === to.role && from.slice !== 
 function crossImportStructureProblem(own, inner) {
   if (own.role !== CROSS_IMPORT_ROLE) return '@x(교차 import 공개 API)는 entities 레이어에서만 쓴다.'
   if (inner.length === CROSS_IMPORT_DEPTH && CROSS_IMPORT_FILE.test(inner[1])) return null
-  return '@x 안에는 소비 슬라이스 이름의 파일(@x/<슬라이스>.ts)만 둔다.'
+  return '@x 안에는 소비 슬라이스 이름의 파일(@x/<슬라이스>.ts·.tsx)만 둔다. index·선언 파일·하위 폴더는 두지 않는다.'
 }
 
 const sharedItem = (rest) => {
@@ -133,6 +136,7 @@ const sharedItem = (rest) => {
 function sharedStructureProblem(own) {
   const parts = own.rest.split('/')
   if (!SHARED_SEGMENTS.has(parts[0])) return `${own.folder} 바로 아래는 ui/, lib/, api/, config/, assets/ 세그먼트만 둔다. 도메인 코드는 쓰는 슬라이스로 옮긴다.`
+  if (parts[0] === ASSETS_SEGMENT) return ASSETS_HOLD_FILES_ONLY
   if (parts.length === SEGMENT_ENTRY_DEPTH && ITEM_ENTRY_SEGMENTS.has(parts[0]) && INDEX_FILE.test(parts[1]))
     return `${own.folder}/${parts[0]} 전체를 묶는 index.ts를 두지 않는다. 항목마다 진입점을 둔다.`
   return null
@@ -143,6 +147,7 @@ function sliceStructureProblem(own) {
   const basename = inner.at(-1)
   if (inner.length === 1) return INDEX_FILE.test(basename) ? null : '슬라이스 루트에는 공개 API(index.ts, index.server.ts)만 둔다.'
   if (inner[0] === CROSS_IMPORT_FOLDER) return crossImportStructureProblem(own, inner)
+  if (inner[0] === ASSETS_SEGMENT) return ASSETS_HOLD_FILES_ONLY
   if (!SLICE_SEGMENTS.has(inner[0])) return '슬라이스는 ui/, model/, api/, lib/, config/, assets/ 세그먼트로 나눈다.'
   if (INDEX_FILE.test(basename)) return '세그먼트 안에 index.ts를 두지 않는다. 공개 API는 슬라이스 루트 하나다.'
   return null
@@ -164,7 +169,7 @@ const sliceStructure = {
 
 function sharedImportProblem(from, to) {
   const parts = to.rest.split('/').filter((part) => !PUBLIC_ENTRY.test(part))
-  if (parts[0] === ASSETS_SEGMENT) return null
+  if (parts[0] === ASSETS_SEGMENT && STATIC_ASSET_FILE.test(parts.at(-1))) return null
   if (from?.role === 'shared' && sharedItem(from.rest) === sharedItem(to.rest)) return null
   if (parts.length > SHARED_ITEM_DEPTH) return `${to.folder}는 세그먼트 또는 항목 진입점까지만 import한다(@${to.folder}/lib/<항목>).`
   if (parts.length === 1 && ITEM_ENTRY_SEGMENTS.has(parts[0])) return `${to.folder}/${parts[0]}/<항목>처럼 항목 진입점으로 import한다.`
@@ -176,6 +181,7 @@ const isSliceEntry = (inner) => inner.length === 0 || (inner.length === 1 && PUB
 function foreignImportProblem(to, isEntry) {
   const consumer = crossImportConsumer(to)
   if (consumer) return `${to.folder}/${to.slice}/@x/${consumer}는 같은 레이어의 ${consumer} 슬라이스 전용이다. 다른 곳은 공개 API(index.ts)로 가져온다.`
+  if (segmentOf(to) === ASSETS_SEGMENT) return `${to.folder}/${to.slice}/assets는 그 슬라이스 전용이다. 여러 슬라이스가 쓰면 shared/assets로 옮긴다.`
   return isEntry ? null : `${to.folder}/${to.slice}는 공개 API(index.ts)로만 import한다.`
 }
 

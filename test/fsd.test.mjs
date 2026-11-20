@@ -225,6 +225,22 @@ test('assets 세그먼트: shared/assets는 깊이와 상관없이, 슬라이스
   assert.deepEqual(rules(image('@shared/assets/images/today/score_1.webp'), 'src/_pages/today/model/todayCuts.ts'), [])
   assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/entities/tarot/ui/tarot-card/cardImages.ts'), [])
   assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/_pages/today/ui/Today.tsx'), ['fsd/public-api'])
-  assert.deepEqual(rules('export const value = 1;', 'src/entities/tarot/assets/sizes.ts'), [])
-  assert.deepEqual(rules('export const value = 1;', 'src/shared/assets/fonts.ts'), [])
+  assert.deepEqual(rules(image('@shared/assets/images/back.webp'), 'src/shared/lib/share/share.ts'), [])
+  assert.deepEqual(lint(image('@entities/tarot/assets/back.webp'), 'src/_pages/today/ui/Today.tsx', NEXT_OFFICIAL)[0].message, 'entities/tarot/assets는 그 슬라이스 전용이다. 여러 슬라이스가 쓰면 shared/assets로 옮긴다.')
+})
+
+test('assets 세그먼트에는 정적 자산만: 코드 파일은 구조 오류, 코드 경로처럼 깊이 들어가면 깊은 import', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/tarot/assets/sizes.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/shared/assets/fonts.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules("import { util } from '@shared/assets/a/b/util';", 'src/_pages/today/ui/Today.tsx'), ['fsd/public-api'])
+})
+
+test('@x 이름: 대문자·하이픈·숫자 시작과 .tsx는 받고, 선언 파일·테스트·index.server는 구조 오류, entities 밖 @x import는 공개 API 위반', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  for (const ok of ['Ziwei.ts', 'my-slice.ts', '2fa.ts', 'ziwei.tsx'])
+    assert.deepEqual(rules('export const value = 1;', `src/entities/destiny/@x/${ok}`), [], ok)
+  for (const bad of ['ziwei.d.ts', 'ziwei.test.ts', 'index.server.ts'])
+    assert.ok(rules('export const value = 1;', `src/entities/destiny/@x/${bad}`).includes('fsd/slice-structure'), bad)
+  assert.deepEqual(rules("import { Home } from '@pages/home/@x/report';", 'src/_pages/report/ui/Report.tsx'), ['fsd/public-api', 'fsd/independent-slices'])
 })
