@@ -274,7 +274,7 @@ export default [...quality(projectConfigs), ...projectConfigs, ...fsd({ next: tr
 
 | 규칙 | 막는 것 |
 |---|---|
-| `fsd/independent-slices` | 아래 레이어가 위를 import, 같은 레이어의 옆 슬라이스 import |
+| `fsd/independent-slices` | 아래 레이어가 위를 import, 같은 레이어의 옆 슬라이스 import(교차 import 공개 API `A/@x/B`를 B가 쓰는 것은 허용) |
 | `fsd/public-api` | 슬라이스 밖에서 세그먼트까지 들어가는 import, shared 항목 안쪽 import, 자기 공개 API 경유, 공개 API의 `export *` |
 | `fsd/slice-structure` | 슬라이스 루트에 `index.ts` 외 파일, 목적 이름이 아닌 세그먼트, 세그먼트 안 배럴, shared 도메인 폴더·큰 배럴 |
 | `fsd/component-file` | `ui/` 밖의 컴포넌트, 파일 이름과 다른 컴포넌트(한 파일 = 한 컴포넌트) |

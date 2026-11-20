@@ -22,6 +22,8 @@ const FUNCTION_EXPRESSIONS = new Set(['ArrowFunctionExpression', 'FunctionExpres
 const DEFAULT_SRC = 'src'
 const SEGMENT_ENTRY_DEPTH = 2
 const SHARED_ITEM_DEPTH = 2
+const CROSS_IMPORT_FOLDER = '@x'
+const CROSS_IMPORT_DEPTH = 2
 
 const toPosix = (file) => file.replaceAll('\\', '/')
 
@@ -101,6 +103,15 @@ function importVisitors(check) {
 }
 
 const segmentOf = (own) => own.rest.split('/')[1]
+
+// FSD 교차 import 공개 API: <레이어>/A/@x/B.ts는 같은 레이어의 B 슬라이스에만 여는 A의 API다(https://feature-sliced.design/docs/reference/public-api).
+function crossImportConsumer(located) {
+  const [, folder, file, ...deeper] = located.rest.split('/')
+  if (folder !== CROSS_IMPORT_FOLDER || !file || deeper.length > 0) return null
+  return file.replace(SCRIPT_EXTENSION, '')
+}
+
+const isCrossImportFor = (from, to) => from?.role === to.role && from.slice !== to.slice && crossImportConsumer(to) === from.slice
 const sharedItem = (rest) => {
   const [segment, item = ''] = rest.split('/')
   return `${segment}/${item.replace(SCRIPT_EXTENSION, '')}`
@@ -118,6 +129,7 @@ function sliceStructureProblem(own) {
   const inner = own.rest.split('/').slice(1)
   const basename = inner.at(-1)
   if (inner.length === 1) return INDEX_FILE.test(basename) ? null : '슬라이스 루트에는 공개 API(index.ts, index.server.ts)만 둔다.'
+  if (inner[0] === CROSS_IMPORT_FOLDER) return inner.length === CROSS_IMPORT_DEPTH ? null : '@x 안에는 소비 슬라이스 이름의 파일(@x/<슬라이스>.ts)만 둔다.'
   if (!SLICE_SEGMENTS.has(inner[0])) return '슬라이스는 ui/, model/, api/, lib/, config/ 세그먼트로 나눈다.'
   if (INDEX_FILE.test(basename)) return '세그먼트 안에 index.ts를 두지 않는다. 공개 API는 슬라이스 루트 하나다.'
   return null
@@ -146,6 +158,9 @@ function sharedImportProblem(from, to) {
 }
 
 function slicedImportProblem(from, to) {
+  if (isCrossImportFor(from, to)) return null
+  const consumer = crossImportConsumer(to)
+  if (consumer) return `${to.folder}/${to.slice}/@x/${consumer}는 같은 레이어의 ${consumer} 슬라이스 전용이다. 다른 곳은 공개 API(index.ts)로 가져온다.`
   const inner = to.rest.split('/').slice(1)
   const isEntry = inner.length === 0 || (inner.length === 1 && PUBLIC_ENTRY.test(inner[0]))
   const isOwnSlice = from?.role === to.role && from.slice === to.slice
@@ -185,6 +200,7 @@ const publicApi = {
 function dependencyProblem(from, to) {
   if (ROLES.indexOf(to.role) < ROLES.indexOf(from.role)) return `${from.folder}에서 상위 레이어 ${to.folder}를 참조할 수 없다.`
   if (from.role !== to.role || !SLICED_ROLES.has(from.role) || from.slice === to.slice) return null
+  if (isCrossImportFor(from, to)) return null
   return `같은 레이어의 ${from.slice} → ${to.slice} 교차 참조를 금지한다. 도메인을 합치거나 공통 책임을 하위 레이어로 옮긴다.`
 }
 

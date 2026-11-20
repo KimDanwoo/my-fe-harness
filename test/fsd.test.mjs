@@ -187,3 +187,17 @@ test('잘못된 설정은 조용히 규칙을 끄지 않고 에러를 낸다', (
   assert.throws(() => fsd({ srcDir: '' }), /srcDir/)
   assert.equal(fsdSettings({ srcDir: './apps/web/src/' }).srcDir, 'apps/web/src')
 })
+
+test('교차 import(@x): A/@x/B는 같은 레이어 B 슬라이스만 쓰고, 다른 곳은 공개 API로', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const crossImport = "import { DestinyChart } from '@entities/destiny/@x/ziwei';"
+  assert.deepEqual(rules(crossImport, 'src/entities/ziwei/api/getZiweiReading.ts'), [])
+  assert.deepEqual(rules(crossImport, 'src/entities/astro/api/getAstro.ts'), ['fsd/public-api', 'fsd/independent-slices'])
+  assert.deepEqual(rules(crossImport, 'src/features/share/model/share.ts'), ['fsd/public-api'])
+  assert.deepEqual(rules("import { DestinyChart } from '@entities/destiny/@x/ziwei/deep';", 'src/entities/ziwei/api/getZiweiReading.ts'), [
+    'fsd/public-api',
+    'fsd/independent-slices',
+  ])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei.ts'), [])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei/chart.ts'), ['fsd/slice-structure'])
+})

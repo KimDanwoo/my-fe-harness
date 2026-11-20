@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **FSD 교차 import(`@x`) 지원** — `<레이어>/A/@x/B.ts`(같은 레이어의 B 슬라이스에만 여는 A의 API, FSD 공식 표기)를 `independent-slices`·`public-api`가 옆 슬라이스 참조·깊은 import로 잘못 잡았다.
+  이제 B 슬라이스가 `@…/A/@x/B`를 가져오는 것은 허용하고, 다른 슬라이스·다른 레이어가 쓰거나 `@x` 안을 더 파고들면 막는다. `slice-structure`는 슬라이스 루트의 `@x/<슬라이스>.ts`를 허용한다.
+  cheongyeon-saju에서 이 오탐 24건이 사라졌다.
+
 ## [0.5.0] - 2026-11-20
 
 ### Added
