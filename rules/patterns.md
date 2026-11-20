@@ -100,7 +100,7 @@ function dateIssue(parts: DateParts) {
 - 문서로만 둔 규칙은 무너진다. 위 규칙은 ESLint(`no-nested-ternary`, `complexity`, `max-lines-per-function`, `no-magic-numbers`, `react/forbid-elements` 등)와 검사 스크립트로 강제한다.
 - 규칙 끄는 인라인 주석(`eslint-disable`)은 쓰지 않는다(`linterOptions.noInlineConfig`). 예외는 설정 파일 한 곳에 이유와 함께 둔다.
 
-## 주석 — 기본은 달지 않는다
+## 주석 — 달지 않는다
 
 ```ts
 // ❌ 코드가 하는 일을 읽어 주는 주석
@@ -111,10 +111,11 @@ const result = sessions.filter((s) => s.expiresAt > now)
 const liveSessions = sessions.filter(isNotExpired)
 ```
 
-- 설명하고 싶어지면 주석 대신 함수·변수로 추출해 **이름으로 설명**한다.
-- 예외는 하나: 코드만 보면 틀려 보이는 **우회·외부 제약**. 이때는 근거(이슈·문서 링크)를 함께 단다.
-- 주석 처리된 코드는 남기지 않는다 — 이전 코드는 git에 있다.
+- 주석을 달고 싶어지면 그 자리의 코드가 덜 깔끔하다는 신호다. 함수·변수로 추출해 **이름으로 설명**한다.
+- JSDoc(`/** */`)·링크를 단 주석·주석 처리된 코드도 같다. 이전 코드는 git에, 근거는 커밋 메시지·PR에 둔다.
+- 남는 것은 사람이 아니라 도구가 읽는 지시문뿐이다: `@ts-expect-error 이유`, `/// <reference>`, `@vitest-environment`, 번들러 매직 주석, `prettier-ignore`.
+- `harness/no-comment`가 기본 잠금에서 강제한다. 허용 지시문 목록은 `lint-guard-baseline.mjs`의 `TOOL_DIRECTIVES` 한 곳에만 있다.
 
 ## 금지
 
-- 예외 밖의 주석·주석 처리된 코드 · boolean 플래그 파라미터(`render(true)`) · 미사용 코드(YAGNI) · 남은 `console.log`.
+- 주석(도구 지시문 제외) · boolean 플래그 파라미터(`render(true)`) · 미사용 코드(YAGNI) · 남은 `console.log`.

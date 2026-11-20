@@ -9,7 +9,6 @@ import { fileURLToPath } from 'node:url'
 const GUARD = fileURLToPath(new URL('../scripts/lint-guard.mjs', import.meta.url))
 const CLI = fileURLToPath(new URL('../bin/my-fe-harness.mjs', import.meta.url))
 
-// 내용에 BAD가 있으면 에러 1건(exit 1), CRASH면 설정 오류(exit 2), 아니면 통과하는 가짜 eslint.
 const FAKE_ESLINT = `#!/usr/bin/env node
 const fs = require('node:fs')
 const files = process.argv.slice(2).filter((a) => !a.startsWith('--') && a !== 'json')
@@ -190,8 +189,11 @@ test('기본 잠금: 중첩 삼항·복잡도·매직넘버 규칙과 인라인 
   assert.ok(configs.some((config) => config.linterOptions?.noInlineConfig === true))
   assert.ok(configs.some((config) => config.ignores?.includes('**/storybook-static/**')))
   assert.equal(rules['no-nested-ternary'], 'error')
-  const componentRules = configs.find((config) => config.plugins?.harness)
+  const componentRules = configs.find((config) => config.rules?.['harness/component-body'])
   assert.deepEqual(componentRules.files, ['**/*.tsx', '**/*.jsx'])
+  const commentRule = configs.find((config) => config.rules?.['harness/no-comment'])
+  assert.ok(commentRule.files[0].includes('mjs'))
+  assert.equal(commentRule.rules['harness/no-comment'][0], 'error')
   assert.equal(componentRules.rules['harness/component-body'], 'error')
   assert.equal(componentRules.rules['harness/no-direct-effect'], 'error')
   assert.deepEqual(rules.complexity, ['error', 10])

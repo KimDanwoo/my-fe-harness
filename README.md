@@ -234,6 +234,9 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 - **상대경로 import 금지**(같은 플러그인) — `harness/no-relative-import`가 `*.{js,jsx,ts,tsx}`의 `./`·`../` import·재수출·동적 import·타입 위치 `import()`(백틱 경로 포함)를 막고
   바꿀 별칭 경로를 알려준다(`--fix`로 자동으로 바뀐다 — 훅이 고친 파일에 먼저 돌린다). 파일마다 가장 가까운 `tsconfig.json`·`jsconfig.json`의 `paths`를 읽어, 가져오는 파일과 대상이 **둘 다 별칭 범위 안일 때만** 잡는다 —
   별칭이 없는 프로젝트, node로 바로 도는 `.mjs`·`.cjs`, 별칭 밖 스크립트, `*.config.*`, `*.d.ts`는 건드리지 않는다. 모노레포는 앱마다 자기 별칭을 쓴다.
+- **주석 금지**(같은 플러그인) — `harness/no-comment`가 모든 JS·TS 파일(테스트 포함)의 주석을 막는다. JSDoc·링크를 단 주석도 막고,
+  도구가 읽는 지시문(`@ts-expect-error`, `/// <reference>`, `@vitest-environment`·`@jest-environment`, `webpack*`·`@vite-ignore` 매직 주석, `prettier-ignore`)과 shebang만 통과시킨다.
+  허용 목록은 `lint-guard-baseline.mjs`의 `TOOL_DIRECTIVES` 한 곳에 있다. 훅은 손댄 파일만 보므로 기존 주석은 그 파일을 고칠 때 함께 정리된다.
 - 고친 파일은 `eslint --fix`로 먼저 자동 수정하고, 끝낼 때는 그 세션·그 에이전트가 고친 파일만 본다. 서브에이전트 종료(SubagentStop)도 검사한다.
 - 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
 

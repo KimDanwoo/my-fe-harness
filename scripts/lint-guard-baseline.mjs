@@ -1,6 +1,3 @@
-// my-fe-harness 기본 잠금(바닥선). lint-guard가 어느 프로젝트에서든 그 프로젝트 ESLint 설정 "아래에" 깐다.
-// ESLint 기본 규칙과 의존성 없는 하네스 플러그인(lint-guard-plugin.mjs)만 쓰고, 프로젝트 설정이 뒤에 오므로 프로젝트가 필요한 곳을 명시적으로 끌 수 있다.
-
 import harness from './lint-guard-plugin.mjs'
 
 const MAX_COMPLEXITY = 10
@@ -18,6 +15,14 @@ const COMPONENT_BODY_RULES = {
   'harness/max-props': 'error',
   'harness/component-markup': 'error',
 }
+const CODE_FILES = ['**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}']
+const TOOL_DIRECTIVES = [
+  '^\\s*@ts-expect-error\\b',
+  '^/\\s*<reference\\b',
+  '^\\s*@(?:vitest|jest)-environment\\b',
+  '^\\s*(?:webpack[A-Z]\\w*|@vite-ignore)\\b',
+  '^\\s*prettier-ignore\\b',
+]
 const ALIAS_IMPORT_FILES = ['**/*.{js,jsx,ts,tsx}']
 const ALIAS_IMPORT_EXEMPT = ['**/*.config.*', '**/*.d.ts']
 const COMPONENT_BODY_RULES_OFF = Object.fromEntries(Object.keys(COMPONENT_BODY_RULES).map((rule) => [rule, 'off']))
@@ -49,14 +54,13 @@ function magicNumbersRule(configs) {
 
 const registeredHarness = (configs) => configs.find((config) => config?.plugins?.harness)?.plugins.harness
 
-// 프로젝트가 고정한 하네스 버전의 플러그인을 재사용할 때, 그 버전에 없는 규칙을 켜면 ESLint 설정 에러로 훅이 잠금 전체를 건너뛴다.
-const rulesIn = (plugin, rules) =>
+const rulesSupportedBy = (plugin, rules) =>
   Object.fromEntries(Object.entries(rules).filter(([name]) => !name.startsWith(HARNESS_PREFIX) || plugin.rules?.[name.slice(HARNESS_PREFIX.length)]))
 
 export function harnessBaseline(configs = []) {
   const projectConfigs = configs.flat(Infinity)
   const plugin = registeredHarness(projectConfigs) ?? harness
-  const harnessRules = (rules) => rulesIn(plugin, rules)
+  const harnessRules = (rules) => rulesSupportedBy(plugin, rules)
   const magicNumbers = magicNumbersRule(projectConfigs)
   const magicNumbersOff = Object.fromEntries(Object.keys(magicNumbers).map((rule) => [rule, 'off']))
   return [
@@ -70,6 +74,7 @@ export function harnessBaseline(configs = []) {
         'max-lines-per-function': ['error', { max: MAX_FUNCTION_LINES, ...LENGTH_OPTIONS }],
       },
     },
+    { files: CODE_FILES, plugins: { harness: plugin }, rules: harnessRules({ 'harness/no-comment': ['error', { allow: TOOL_DIRECTIVES }] }) },
     { files: COMPONENTS_AND_HOOKS, rules: magicNumbers },
     { files: COMPONENT_FILES, plugins: { harness: plugin }, rules: harnessRules(COMPONENT_BODY_RULES) },
     {
