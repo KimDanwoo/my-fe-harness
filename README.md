@@ -40,7 +40,10 @@ Claude Code가 **해당 파일을 편집할 때 자동으로 로드**해 일관�
 /plugin marketplace add KimDanwoo/my-fe-harness
 /plugin install my-fe-harness@my-fe-harness
 
-# 또는 설치 없이 npx — 권장 린 세트(코어 + 프레임워크)
+# 또는 설치 없이 npx — 새 프로젝트는 init 한 번으로 규칙·훅·ESLint·CI까지
+npx github:KimDanwoo/my-fe-harness init --yes --fsd
+
+# 규칙 팩만 얹을 때 — 권장 린 세트(코어 + 프레임워크)
 npx github:KimDanwoo/my-fe-harness add core react
 ```
 
@@ -323,24 +326,22 @@ npx github:KimDanwoo/my-fe-harness check
 ```
 
 ```
-구조 점검 [fsd] — src/ 코드 파일 92개
+구조 점검 [fsd] — 프로젝트 ESLint의 fsd 규칙, 파일 92개
 
   ✖ src/entities/user/ui/UserCard.tsx:1
-      @/features/auth  —  아래→위 import — entities 는 features 를 참조할 수 없다
-  ✖ src/features/cart/model/store.ts:1
-      @/features/like  —  같은 레이어의 다른 슬라이스 직접 import — features/like
-  ✖ src/pages/HomePage.tsx:1
-      @/entities/user/model/store  —  슬라이스 내부 deep import — 공개 API(entities/user)로만 접근한다
+      fsd/independent-slices  —  entities에서 상위 레이어 features를 참조할 수 없다.
+  ✖ src/_pages/home/ui/HomePage.tsx:3
+      fsd/public-api  —  …
 
-  위반 3건 — .claude/rules/fsd.md 의 의존 방향 규칙을 보세요.
+  위반 2건 — .claude/rules/fsd.md 의 의존 방향 규칙을 보세요.
 ```
 
-- **하네스만 할 수 있는 검사다.** 이 프로젝트가 *어떤 구조 팩을 골랐는지* 아는 건 하네스뿐이라,
-  범용 린터가 설정 없이는 잡아주지 않는 의존 방향을 판정한다. `tsconfig`/`jsconfig`의 path alias를 그대로 해석한다.
-- **결정론적 판정만** 한다 — 아래→위 import, 옆 슬라이스 직접 참조, 배럴 우회 deep import 셋뿐.
-  "추상화가 과한가" 같은 판단은 하지 않는다. **볼 곳을 좁혀줄 뿐 자동 수정하지 않는다.**
-- 상대경로·외부 패키지·슬라이스 없는 레이어(`shared` 등) 내부 경로는 위반이 아니다(오탐 방지).
-- 위반이 있으면 **종료 코드 1** — CI에 그대로 걸 수 있다.
+- **FSD는 규칙이 한 곳에만 있다.** `check`가 따로 판정하지 않고 프로젝트 ESLint(`eslint.config`의 `fsd()`)를 돌려 `fsd/*` 결과만 보여준다.
+  레이어 이름(`layers`)·`srcDir`·별칭이 편집기·CI와 똑같이 적용되고, 프로젝트 전체를 돌리므로 Next 루트 `app/`의 공개 API 위반도 잡는다.
+  ESLint가 없거나, 설정에 `fsd` 규칙이 없거나, ESLint가 읽지 못한 파일(문법 오류)이 있으면 **실패(종료 코드 1)**한다 — 조용히 통과시키지 않는다.
+- **feature-based·layered**는 대응하는 ESLint 규칙이 없어 하네스가 import를 직접 스캔한다. 아래→위 import, 옆 슬라이스 직접 참조, 배럴 우회 deep import 셋만 판정하고,
+  `tsconfig`/`jsconfig`의 path alias를 그대로 해석한다. 상대경로·외부 패키지·슬라이스 없는 레이어 내부 경로는 위반이 아니다(오탐 방지).
+- **볼 곳을 좁혀줄 뿐 자동 수정하지 않는다.** 위반이 있으면 **종료 코드 1** — CI에 그대로 걸 수 있다.
 
 ## 스택·컨벤션 스탬프
 
@@ -397,9 +398,34 @@ npx github:KimDanwoo/my-fe-harness check
 ## B. npx CLI (의존성 0)
 
 ```bash
-# 대화형: package.json에서 프레임워크 자동 감지 → 규칙 팩·폴더 구조 선택
+# 대화형: package.json에서 프레임워크 자동 감지 → 규칙 팩·폴더 구조 선택 → 훅·ESLint·CI까지
 npx github:KimDanwoo/my-fe-harness init
+
+# 묻지 않고: 감지한 권장 팩 + FSD 구조
+npx github:KimDanwoo/my-fe-harness init --yes --fsd
 ```
+
+### `init` 한 번으로 까는 것
+
+규칙 문서만 깔면 Claude가 고친 파일만 훅이 검사한다. 사람이 쓴 코드·편집기·CI도 같은 규칙을 받도록 `init`은 아래를 순서대로 깐다.
+이미 있는 파일·스크립트·의존성은 덮어쓰지 않고, 깐 것은 매니페스트에 기록해 `status`·`uninstall`이 다룬다.
+
+| 순서 | 깔리는 것 |
+|---|---|
+| 1 | 규칙 팩(`.claude/rules/`)·`AGENTS.md` 블록 → 폴더 구조(고른 경우) |
+| 2 | 안전장치 훅(`guard`) · 린트 강제 훅(`lint-guard`) · 검증 게이트(`verify-gate`, 관찰 모드) |
+| 3 | `eslint.config.mjs` — `quality()` + (FSD 구조면) `fsd()`. Next·jotai·`src/_app`·`src/_pages`를 감지해 옵션을 채우고, `.claude/`·빌드 산출물은 무시한다 |
+| 4 | `package.json` — 없을 때만 `my-fe-harness`(`#v<지금 버전>` 고정)·`eslint`·`typescript-eslint`(TS일 때), `lint`·`typecheck` 스크립트 |
+| 5 | 의존성 설치 — lockfile로 감지한 매니저(pnpm·npm·yarn·bun)로 설치. `--no-install`이면 건너뛰고 설치 명령을 안내한다 |
+| 6 | `.github/workflows/harness.yml` — PR·main 푸시에 설치 → `lint` → `typecheck`(스크립트가 있을 때). 권한은 `contents: read` |
+
+- **이미 ESLint 설정이 있으면** 그대로 두고, `my-fe-harness/eslint`를 쓰지 않으면 합칠 예시를 출력한다. 하네스 의존성도 추가하지 않는다.
+- **옛 `.eslintrc*`나 ESLint 8 이하면** 설정을 만들지 않고 flat config(ESLint 9 이상)로 옮기라고 안내한다.
+- **모노레포 하위 앱**에서 돌리면 lockfile을 git 루트까지 올라가며 찾고, workflow는 git 루트에 앱별 이름(`harness-apps-web.yml`)으로 두고 `working-directory`를 그 앱으로 잡는다. `.nvmrc`·`.node-version`이 있으면 그 Node 버전을 쓴다.
+- **lockfile이 없으면** 실행한 매니저(npx·pnpm dlx 등)를, 그것도 없으면 npm을 쓰고, CI는 고정 설치·캐시 없이 설치한다. yarn Berry는 `--immutable`과 corepack을 쓴다.
+- `package.json`이 깨져 있으면 아무것도 쓰기 전에 멈춘다.
+- 이미 `lint`·`eslint`를 돌리는 workflow가 있으면 `harness.yml`을 만들지 않는다(CI 중복 방지).
+- `--global`이면 프로젝트 lint·CI 설정은 건너뛴다(프로젝트 전용).
 
 | 명령 | 하는 일 |
 |---|---|
@@ -408,7 +434,7 @@ npx github:KimDanwoo/my-fe-harness init
 | `add all` | 코어+옵션 12팩 전부 (무거움, 구조 팩 제외) |
 | `scaffold feature-based` | 폴더 구조 스캐폴드 + 해당 규칙 설치 (인자 없으면 대화형) |
 | `guard` | 안전장치 강제 훅 설치 (`.claude/settings.json` 병합, idempotent) |
-| `check` | 구조 의존 방향 점검 — 위반 시 종료 코드 1 |
+| `check` | 구조 의존 방향 점검 — 위반 시 종료 코드 1 (fsd는 프로젝트 ESLint의 fsd 규칙 결과) |
 | `status` | 설치·수정 현황 + 스탬프 낡음 여부 |
 | `update` | 안 건드린 규칙만 최신 원본으로 (수정본 보존) |
 | `uninstall` | 우리가 쓴 그대로인 파일만 안전 삭제 (별칭 `unsync`) |
@@ -427,9 +453,10 @@ npx github:KimDanwoo/my-fe-harness uninstall --dry-run
 
 **옵션** — `--all` 규칙 팩 전체 · `--structure <id>` 구조 지정 · `--fsd` = `--structure fsd` ·
 `-t, --target <경로>` 대상 프로젝트 · `-g, --global` `~/.claude`에 설치 ·
-`--no-agents` AGENTS.md 블록 생략(Claude 전용) · `--force` 덮어쓰기 · `--dry-run` 미리보기 · `-v, --version` · `-h, --help`
+`--no-agents` AGENTS.md 블록 생략(Claude 전용) · `-y, --yes` init을 묻지 않고 진행 · `--no-install` init의 의존성 설치 생략 ·
+`--force` 덮어쓰기 · `--dry-run` 미리보기 · `-v, --version` · `-h, --help`
 
-CI 등 비-TTY 환경에서는 `init`/`scaffold`의 대화형 선택 대신 팩·구조를 인자로 지정한다
+CI 등 비-TTY 환경에서는 `init --yes`(구조는 `--structure`·`--fsd`)를 쓰거나 팩·구조를 인자로 지정한다
 (예: `add ts react --structure feature-based`). npm에 배포했다면 `npx my-fe-harness init`으로 바로 쓸 수 있다.
 
 ## 설치 결과
@@ -451,7 +478,7 @@ my-project/
 - 기존 파일은 절대 덮어쓰지 않는다(`--force`를 명시했을 때만).
 - 구버전 Claude Code처럼 `.claude/rules/` 자동 로드가 없는 환경에서는
   CLAUDE.md에 `@.claude/rules/typescript.md` 형태로 import 한 줄을 추가하면 된다.
-- Next.js에서 `fsd`/`feature-based`를 쓰면 `app`·`pages`가 라우팅 폴더와 충돌하므로 둘 다 `_app`·`_pages`로 바꾼다(FSD 공식 Next.js 가이드). `check`는 `_` 접두 레이어 폴더를 같은 레이어로 본다.
+- Next.js에서 `fsd`/`feature-based`를 쓰면 `app`·`pages`가 라우팅 폴더와 충돌하므로 둘 다 `_app`·`_pages`로 바꾼다(FSD 공식 Next.js 가이드). `init`은 `src/_app`·`src/_pages`가 있으면 `fsd()`의 `layers`에 넣고, feature-based의 `check`는 `_` 접두 레이어 폴더를 같은 레이어로 본다.
 
 ## Codex·다른 에이전트 — AGENTS.md
 
@@ -522,6 +549,7 @@ npm test        # 또는 node --test
 
 - `test/structure` — 팩↔파일 정합성, JSON 유효성, 경로 스코핑, `node --check`.
 - `test/cli` — `add`/`scaffold`/`guard`/`check`/`status`/`update`/`uninstall`/`init`/`--global`/자동 감지
+- `test/initProject` — `init`의 ESLint 설정·package.json·CI 생성과 보존 규칙, 모노레포, `uninstall`, ESLint로 넘긴 FSD `check`(런타임이 있으면 실제 ESLint로 생성 설정 로드)
   \+ 매니페스트·스탬프 낡음·구조 위반 판정·경로 탈출 방어 (임시 디렉토리, 실제 `~` 미변경).
 - `test/guard` — 비밀·비밀 파일 커밋·`rm -rf` 차단 + 오탐 방지 매트릭스.
 

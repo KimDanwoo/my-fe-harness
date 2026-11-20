@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-20
+
+### Added
+
+- **`init` 한 번으로 ESLint·CI까지** — 규칙 팩·구조·안전장치 훅 뒤에 린트 강제 훅, 검증 게이트(관찰 모드), `eslint.config.mjs`(`quality()` + FSD 구조면 `fsd()`),
+  `package.json`(없을 때만 `my-fe-harness#v<버전>`·`eslint`·`typescript-eslint`, `lint`·`typecheck` 스크립트), 의존성 설치, `.github/workflows/harness.yml`을 이어서 깐다.
+  이제 Claude가 고친 파일(훅)뿐 아니라 사람이 쓴 코드·편집기·CI도 같은 하네스 규칙으로 검사된다.
+  - 이미 있는 ESLint 설정·workflow·스크립트·의존성(고정한 `my-fe-harness` 버전 포함)은 덮어쓰지 않는다. 기존 설정이 `my-fe-harness/eslint`를 쓰지 않으면 합칠 예시를 출력한다.
+  - 옛 `.eslintrc*`·ESLint 8 이하면 설정을 만들지 않고 안내한다. JS 프로젝트는 TS 없는 설정을 깐다.
+  - Next·jotai·`src/_app`·`src/_pages`를 감지해 `fsd()` 옵션을 채운다. 생성 설정은 `.claude/`(하네스 훅 사본)와 빌드 산출물을 무시한다.
+  - 이미 `lint`·`eslint`를 돌리는 workflow가 있으면 `harness.yml`을 만들지 않는다(CI 중복 방지).
+  - 모노레포 하위 앱은 lockfile을 git 루트까지 찾아 매니저를 정하고, workflow를 git 루트에 앱별 이름(`harness-apps-web.yml`)으로 두고 `working-directory`로 그 앱에서 돌린다.
+  - lockfile이 없으면 실행한 매니저(npx·pnpm dlx 등)를, 그것도 없으면 npm을 쓰고 CI는 고정 설치·캐시 없이 설치한다. yarn Berry는 `--immutable`과 corepack을 쓴다. workflow 권한은 `contents: read`로 둔다.
+  - 깐 파일과 `package.json`에 추가한 키는 매니페스트(`project`)에 기록한다. `status`가 보여주고, `uninstall`은 하네스가 쓴 그대로인 파일·값만 걷어낸다.
+- **`init --yes`·`--no-install`** — 묻지 않고 감지한 권장 팩으로 진행(구조는 `--structure`·`--fsd`로만), 의존성 설치 생략(설치 명령을 안내).
+
+### Changed
+
+- **FSD `check`는 프로젝트 ESLint의 `fsd/*` 결과를 보여준다** — 정규식으로 FSD 의존 방향을 따로 판정하던 사본을 없앴다. 레이어 이름·`srcDir`·별칭이 편집기·CI와 같게 적용된다.
+  ESLint가 없거나 설정에 `fsd` 규칙이 없거나 ESLint가 읽지 못한 파일(문법 오류)이 있으면 종료 코드 1로 실패한다. 프로젝트 전체를 돌려 `fsd/*`만 보여주므로 Next 루트 `app/`의 공개 API 위반도 잡는다(`.vue`·`require()`는 `fsd()`가 보지 않는다).
+  feature-based·layered는 대응 ESLint 규칙이 없어 기존 import 스캔을 그대로 쓴다.
+- `verify-skill`의 패키지 매니저 감지도 lockfile을 git 루트까지 올라가며 찾는다(모노레포 하위 앱).
+
 ## [0.6.0] - 2026-11-20
 
 ### Added

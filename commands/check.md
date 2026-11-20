@@ -10,7 +10,9 @@ argument-hint: ""
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/bin/my-fe-harness.mjs" check --target .
    ```
-2. 보고되는 위반은 세 가지다. 전부 결정론적 판정이며 스타일 취향이 아니다:
+2. FSD 구조는 프로젝트 ESLint의 `fsd/*` 규칙 결과를 그대로 보여준다(규칙 이름과 메시지가 함께 나온다).
+   "ESLint가 없습니다"·"fsd 규칙이 없습니다"로 실패하면 `my-fe-harness init`으로 `eslint.config.mjs`를 깔거나 기존 설정에 `fsd()`를 넣으라고 안내한다.
+   feature-based·layered 구조에서 보고되는 위반은 세 가지다. 전부 결정론적 판정이며 스타일 취향이 아니다:
    - **아래→위 import** — 하위 레이어가 상위 레이어를 참조(의존 방향 역전)
    - **같은 레이어의 다른 슬라이스 직접 import** — 결합 시작 신호
    - **슬라이스 내부 deep import** — 공개 API(배럴) 우회

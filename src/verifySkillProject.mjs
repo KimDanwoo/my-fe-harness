@@ -1,26 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { PACKAGE_MANAGERS, detectPackageManager } from './packageManager.mjs'
 
-const PACKAGE_MANAGERS = {
-  pnpm: {
-    run: ['pnpm', 'run'],
-    install: ['pnpm', 'install', '--frozen-lockfile', '--prefer-offline'],
-    exec: ['pnpm', 'exec'],
-    preview: ['pnpm', 'preview'],
-    add: 'pnpm add -D',
-  },
-  npm: { run: ['npm', 'run'], install: ['npm', 'ci'], exec: ['npx', '--no-install'], preview: ['npm', 'run', 'preview', '--'], add: 'npm install -D' },
-  yarn: { run: ['yarn', 'run'], install: ['yarn', 'install', '--frozen-lockfile'], exec: ['yarn'], preview: ['yarn', 'preview'], add: 'yarn add -D' },
-  bun: { run: ['bun', 'run'], install: ['bun', 'install', '--frozen-lockfile'], exec: ['bunx'], preview: ['bun', 'run', 'preview'], add: 'bun add -d' },
-}
-const LOCKFILES = [
-  ['pnpm-lock.yaml', 'pnpm'],
-  ['yarn.lock', 'yarn'],
-  ['bun.lockb', 'bun'],
-  ['bun.lock', 'bun'],
-  ['package-lock.json', 'npm'],
-]
-const DEFAULT_PACKAGE_MANAGER = 'pnpm'
 const QUICK_SCRIPTS = ['lint', 'typecheck', 'type-check', 'test']
 const E2E_SCRIPTS = ['e2e', 'test:e2e']
 const NEXT_APP_ROOTS = ['app', 'src/app']
@@ -44,13 +25,6 @@ function readPackage(targetDir) {
   } catch {
     throw new Error(`${file} 파싱 실패 — 유효한 JSON이 아닙니다.`)
   }
-}
-
-function detectPackageManager(targetDir, pkg) {
-  const declared = String(pkg.packageManager ?? '').split('@')[0]
-  if (Object.hasOwn(PACKAGE_MANAGERS, declared)) return declared
-  const lockfile = LOCKFILES.find(([name]) => fs.existsSync(path.join(targetDir, name)))
-  return lockfile ? lockfile[1] : DEFAULT_PACKAGE_MANAGER
 }
 
 function detectFramework(deps) {

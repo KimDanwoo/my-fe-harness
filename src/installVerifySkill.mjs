@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { hashFile, writeFileAtomic } from './manifest.mjs'
 import { renderSkill, setupNotes } from './verifySkillDocs.mjs'
 import { detectProject } from './verifySkillProject.mjs'
+import { writeOne } from './projectFiles.mjs'
 
 const TEMPLATE_DIR = fileURLToPath(new URL('../assets/verify-skill/', import.meta.url))
 const SKILL_REL = '.claude/skills/verify/SKILL.md'
@@ -55,22 +56,13 @@ function renderFiles(project) {
   }
 }
 
-function writeOne(dest, content, { force, dryRun }) {
-  const exists = fs.existsSync(dest)
-  if (exists && !force) return 'kept'
-  if (!dryRun) {
-    fs.mkdirSync(path.dirname(dest), { recursive: true })
-    fs.writeFileSync(dest, content)
-  }
-  return exists ? 'overwritten' : 'created'
-}
-
 function ensureGitignore(targetDir, dryRun) {
   const file = path.join(targetDir, '.gitignore')
   const exists = fs.existsSync(file)
   const current = exists ? fs.readFileSync(file, 'utf8') : ''
   if (current.split(/\r?\n/).some((line) => GITIGNORE_EQUIVALENTS.has(line.trim()))) return 'exists'
-  const separator = current === '' || current.endsWith('\n') ? '' : '\n'
+  const isLineStart = current === '' || current.endsWith('\n')
+  const separator = isLineStart ? '' : '\n'
   if (!dryRun) writeFileAtomic(file, `${current}${separator}${GITIGNORE_ENTRY}\n`)
   return exists ? 'added' : 'created'
 }
@@ -83,7 +75,6 @@ function recordedShas(rels, statuses, previous, targetDir) {
   return Object.fromEntries(entries)
 }
 
-// 대상 프로젝트에 verify 스킬과 화면 비교 스크립트를 깐다. 기존 파일은 --force 없이는 보존한다.
 export function installVerifySkill(options, manifest) {
   if (options.global) throw new Error('verify-skill은 프로젝트 전용입니다 — --global 없이 대상 프로젝트에서 실행하세요.')
   const { targetDir } = options
@@ -100,6 +91,7 @@ export function removeVerifySkillDirs(base, dryRun) {
   if (dryRun) return
   for (const rel of PRUNABLE_DIRS) {
     const dir = path.join(base, rel)
-    if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+    const isEmptyDir = fs.existsSync(dir) && fs.readdirSync(dir).length === 0
+    if (isEmptyDir) fs.rmdirSync(dir)
   }
 }
