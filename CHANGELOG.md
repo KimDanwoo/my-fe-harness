@@ -7,6 +7,11 @@
 
 ### Added
 
+- **FSD 구조 잠금 `fsd(options)`** — labs에만 있던 FSD 규칙(`fsd/independent-slices`·`public-api`·`slice-structure`·`component-file`, 옵션으로 `routing-location`·`entity-state`)을
+  의존성 0인 플러그인 `fsd`로 옮겼다. 레이어는 표준 역할로 판정하고 폴더 이름은 `layers`로 받아(labs `views`, Next 공식 `_app`·`_pages`) 프로젝트마다 따로 짜던
+  경계 설정(labs 자체 규칙·cheongyeon `import-x`·`eslint-plugin-boundaries`)을 하나로 모은다. import 경로는 tsconfig `paths`로 푼다.
+  상대경로 금지는 `harness/no-relative-import`가 맡으므로 `public-api`에서는 뺐다. labs 7개 앱에 돌려 기존 규칙과 같은 0건을 확인했다.
+
 - **`my-fe-harness/eslint` 진입점** — 프로젝트 ESLint 설정이 하네스 규칙을 복사하지 않고 가져다 쓴다(`plugin`, `quality(projectConfigs)`).
   labs처럼 플러그인 사본을 두면 원본과 어긋난다(labs 사본에는 `no-relative-import`가 빠져 있었다). 기본 잠금은 프로젝트가 이미 등록한
   `harness` 플러그인 객체를 재사용해, 훅이 프로젝트 설정 위에 덧씌울 때 `Cannot redefine plugin`으로 깨지지 않는다.

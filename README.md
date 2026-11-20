@@ -263,6 +263,34 @@ export default [...quality(projectConfigs), ...projectConfigs]
 - 도입하면 바뀌는 것: 규칙 끄는 인라인 주석(`eslint-disable`)이 무시된다(`noInlineConfig`), `public/`·`vendor/`·`generated/` 등은 검사하지 않는다,
   별칭이 있는 프로젝트의 `./`·`../` import가 에러가 된다(`--fix`로 바뀜). ESLint 9 이상(flat config)이 필요하다.
 
+#### FSD 구조 잠금 — `fsd(options)`
+
+```js
+import { fsd, quality } from 'my-fe-harness/eslint'
+
+// Next App Router + FSD 공식 레이어 이름(_app·_pages), jotai 사용
+export default [...quality(projectConfigs), ...projectConfigs, ...fsd({ next: true, jotai: true, layers: { app: '_app', pages: '_pages' } })]
+```
+
+| 규칙 | 막는 것 |
+|---|---|
+| `fsd/independent-slices` | 아래 레이어가 위를 import, 같은 레이어의 옆 슬라이스 import |
+| `fsd/public-api` | 슬라이스 밖에서 세그먼트까지 들어가는 import, shared 항목 안쪽 import, 자기 공개 API 경유, 공개 API의 `export *` |
+| `fsd/slice-structure` | 슬라이스 루트에 `index.ts` 외 파일, 목적 이름이 아닌 세그먼트, 세그먼트 안 배럴, shared 도메인 폴더·큰 배럴 |
+| `fsd/component-file` | `ui/` 밖의 컴포넌트, 파일 이름과 다른 컴포넌트(한 파일 = 한 컴포넌트) |
+| `fsd/routing-location` (`next`) | FSD app 레이어 안의 Next 라우팅 파일(`page`·`layout` 등) |
+| `fsd/entity-state` (`jotai`) | 슬라이스 `model/` 밖에서 정의한 전역 atom |
+
+- 레이어는 표준 역할(`app`·`pages`·`widgets`·`features`·`entities`·`shared`)로 판정하고, 폴더 이름은 `layers`로 바꾼다(예: `{ pages: 'views' }`).
+  쓰지 않는 역할은 `false`로 끈다 — Next Pages Router의 `src/pages`가 FSD pages로 잡히지 않게 `{ pages: false }`. `srcDir` 기본값은 `src`.
+- 옵션 오타(`layers`의 알 수 없는 역할, 빈 폴더 이름, `next`·`jotai`·`srcDir`·`layers` 밖의 키, 빈 `srcDir`)는 규칙을 조용히 끄지 않고 설정 로드 때 에러를 낸다.
+- import 경로는 가장 가까운 tsconfig·jsconfig의 와일드카드 `paths`로 풀고, 없으면 `@<역할>/`·`@<폴더>/`를 그 레이어로 본다.
+  `extends`로 상속한 `paths`, `references`로 나눈 tsconfig(Vite의 `tsconfig.app.json`), `baseUrl`만 쓰는 import는 읽지 않는다 — `paths`를 앱 tsconfig에 직접 둔다.
+- 검사하는 import: `import`·`export … from`·`export *`·`import()`·타입 위치 `import()`. `require()`는 보지 않는다.
+- `next: true`면 루트 `app/`·루트 파일도 공개 API 규칙을 받는다. 테스트 파일은 공개 API 규칙에서 빠진다.
+- 파서는 프로젝트 설정이 맡는다(`.ts`·`.tsx`를 읽는 파서가 먼저 있어야 한다). 플러그인 이름은 `fsd`라 같은 이름의 다른 플러그인과 같이 쓰면 `Cannot redefine plugin`이 난다.
+- 상대경로 금지는 `quality()`의 `harness/no-relative-import`가 맡는다(별칭이 있는 프로젝트에서 동작). 두 프리셋을 같이 쓴다.
+
 ### verify 스킬 틀 — `verify-skill`
 
 커밋·PR 전에 "실제로 앱을 띄워 증거로 확인"하는 절차(`verify` 스킬)와 기준 커밋 대비 화면 비교 스크립트를 대상 프로젝트에 깐다.

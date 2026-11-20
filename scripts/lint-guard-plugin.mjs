@@ -373,6 +373,12 @@ function aliasRootsNear(dir) {
   return aliasRootsByDir.get(dir)
 }
 
+export function resolveAliasSpecifier(importer, specifier) {
+  const roots = aliasRootsNear(path.dirname(importer)).filter(({ prefix }) => specifier.startsWith(prefix))
+  const root = roots.sort((left, right) => right.prefix.length - left.prefix.length)[0]
+  return root ? path.join(root.dir, specifier.slice(root.prefix.length)) : null
+}
+
 function isInside(file, dir) {
   const relative = path.relative(dir, file)
   return relative !== '' && !path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..'
