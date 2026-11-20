@@ -200,4 +200,31 @@ test('교차 import(@x): A/@x/B는 같은 레이어 B 슬라이스만 쓰고, �
   ])
   assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei.ts'), [])
   assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei/chart.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei/index.ts'), ['fsd/slice-structure'])
+})
+
+test('교차 import(@x) 세부: 상대경로·확장자 import는 같게, 자기 슬라이스는 내부로, entities 밖과 index·선언 파일은 막는다', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const consumer = 'src/entities/ziwei/api/getZiweiReading.ts'
+  assert.deepEqual(rules("import { Chart } from '../../destiny/@x/ziwei';", consumer), [])
+  assert.deepEqual(rules("import { Chart } from '@entities/destiny/@x/ziwei.ts';", consumer), [])
+  assert.deepEqual(rules("import { Chart } from '@entities/destiny/@x/ziwei';", 'src/entities/destiny/lib/chart.ts'), [])
+  assert.deepEqual(rules("import { Like } from '@features/like/@x/share';", 'src/features/share/model/share.ts'), [
+    'fsd/public-api',
+    'fsd/independent-slices',
+  ])
+  assert.deepEqual(rules('export const value = 1;', 'src/features/like/@x/share.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/index.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/destiny/@x/ziwei.d.ts'), ['fsd/slice-structure'])
+  assert.deepEqual(rules("import { Chart } from '@entities/features/@x/shared';", 'src/entities/shared/api/x.ts'), [])
+})
+
+test('assets 세그먼트: shared/assets는 깊이와 상관없이, 슬라이스 assets는 그 슬라이스 안에서만', { skip }, () => {
+  const rules = (code, filename) => lint(code, filename, NEXT_OFFICIAL).map((message) => message.ruleId)
+  const image = (from) => `import score from '${from}';`
+  assert.deepEqual(rules(image('@shared/assets/images/today/score_1.webp'), 'src/_pages/today/model/todayCuts.ts'), [])
+  assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/entities/tarot/ui/tarot-card/cardImages.ts'), [])
+  assert.deepEqual(rules(image('@entities/tarot/assets/back.webp'), 'src/_pages/today/ui/Today.tsx'), ['fsd/public-api'])
+  assert.deepEqual(rules('export const value = 1;', 'src/entities/tarot/assets/sizes.ts'), [])
+  assert.deepEqual(rules('export const value = 1;', 'src/shared/assets/fonts.ts'), [])
 })

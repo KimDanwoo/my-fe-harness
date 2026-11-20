@@ -8,8 +8,9 @@ import { resolveAliasSpecifier, staticSpecifier } from './lint-guard-plugin.mjs'
 export const FSD_SETTINGS = 'my-fe-harness/fsd'
 const ROLES = ['app', 'pages', 'widgets', 'features', 'entities', 'shared']
 const SLICED_ROLES = new Set(['pages', 'widgets', 'features', 'entities'])
-const SLICE_SEGMENTS = new Set(['ui', 'model', 'api', 'lib', 'config'])
-const SHARED_SEGMENTS = new Set(['ui', 'lib', 'api', 'config'])
+const ASSETS_SEGMENT = 'assets'
+const SLICE_SEGMENTS = new Set(['ui', 'model', 'api', 'lib', 'config', ASSETS_SEGMENT])
+const SHARED_SEGMENTS = new Set(['ui', 'lib', 'api', 'config', ASSETS_SEGMENT])
 const ITEM_ENTRY_SEGMENTS = new Set(['ui', 'lib'])
 const PUBLIC_ENTRY = /^index(?:\.server)?(?:\.tsx?)?$/
 const INDEX_FILE = /^index(?:\.server)?\.tsx?$/
@@ -24,6 +25,9 @@ const SEGMENT_ENTRY_DEPTH = 2
 const SHARED_ITEM_DEPTH = 2
 const CROSS_IMPORT_FOLDER = '@x'
 const CROSS_IMPORT_DEPTH = 2
+const CROSS_IMPORT_ROLE = 'entities'
+const CROSS_IMPORT_TARGET = /^(?!index(?:\.|$))([^.]+)(?:\.tsx?)?$/
+const CROSS_IMPORT_FILE = /^(?!index\.)[^.]+\.tsx?$/
 
 const toPosix = (file) => file.replaceAll('\\', '/')
 
@@ -104,14 +108,23 @@ function importVisitors(check) {
 
 const segmentOf = (own) => own.rest.split('/')[1]
 
-// FSD 교차 import 공개 API: <레이어>/A/@x/B.ts는 같은 레이어의 B 슬라이스에만 여는 A의 API다(https://feature-sliced.design/docs/reference/public-api).
+// FSD 교차 import 공개 API: entities/A/@x/B.ts는 같은 레이어의 B 슬라이스에만 여는 A의 API다. 공식 문서가 entities 레이어로 한정한다
+// (https://feature-sliced.design/docs/reference/public-api).
 function crossImportConsumer(located) {
+  if (located.role !== CROSS_IMPORT_ROLE) return null
   const [, folder, file, ...deeper] = located.rest.split('/')
   if (folder !== CROSS_IMPORT_FOLDER || !file || deeper.length > 0) return null
-  return file.replace(SCRIPT_EXTENSION, '')
+  return file.match(CROSS_IMPORT_TARGET)?.[1] ?? null
 }
 
 const isCrossImportFor = (from, to) => from?.role === to.role && from.slice !== to.slice && crossImportConsumer(to) === from.slice
+
+function crossImportStructureProblem(own, inner) {
+  if (own.role !== CROSS_IMPORT_ROLE) return '@x(교차 import 공개 API)는 entities 레이어에서만 쓴다.'
+  if (inner.length === CROSS_IMPORT_DEPTH && CROSS_IMPORT_FILE.test(inner[1])) return null
+  return '@x 안에는 소비 슬라이스 이름의 파일(@x/<슬라이스>.ts)만 둔다.'
+}
+
 const sharedItem = (rest) => {
   const [segment, item = ''] = rest.split('/')
   return `${segment}/${item.replace(SCRIPT_EXTENSION, '')}`
@@ -119,7 +132,7 @@ const sharedItem = (rest) => {
 
 function sharedStructureProblem(own) {
   const parts = own.rest.split('/')
-  if (!SHARED_SEGMENTS.has(parts[0])) return `${own.folder} 바로 아래는 ui/, lib/, api/, config/ 세그먼트만 둔다. 도메인 코드는 쓰는 슬라이스로 옮긴다.`
+  if (!SHARED_SEGMENTS.has(parts[0])) return `${own.folder} 바로 아래는 ui/, lib/, api/, config/, assets/ 세그먼트만 둔다. 도메인 코드는 쓰는 슬라이스로 옮긴다.`
   if (parts.length === SEGMENT_ENTRY_DEPTH && ITEM_ENTRY_SEGMENTS.has(parts[0]) && INDEX_FILE.test(parts[1]))
     return `${own.folder}/${parts[0]} 전체를 묶는 index.ts를 두지 않는다. 항목마다 진입점을 둔다.`
   return null
@@ -129,8 +142,8 @@ function sliceStructureProblem(own) {
   const inner = own.rest.split('/').slice(1)
   const basename = inner.at(-1)
   if (inner.length === 1) return INDEX_FILE.test(basename) ? null : '슬라이스 루트에는 공개 API(index.ts, index.server.ts)만 둔다.'
-  if (inner[0] === CROSS_IMPORT_FOLDER) return inner.length === CROSS_IMPORT_DEPTH ? null : '@x 안에는 소비 슬라이스 이름의 파일(@x/<슬라이스>.ts)만 둔다.'
-  if (!SLICE_SEGMENTS.has(inner[0])) return '슬라이스는 ui/, model/, api/, lib/, config/ 세그먼트로 나눈다.'
+  if (inner[0] === CROSS_IMPORT_FOLDER) return crossImportStructureProblem(own, inner)
+  if (!SLICE_SEGMENTS.has(inner[0])) return '슬라이스는 ui/, model/, api/, lib/, config/, assets/ 세그먼트로 나눈다.'
   if (INDEX_FILE.test(basename)) return '세그먼트 안에 index.ts를 두지 않는다. 공개 API는 슬라이스 루트 하나다.'
   return null
 }
@@ -151,20 +164,26 @@ const sliceStructure = {
 
 function sharedImportProblem(from, to) {
   const parts = to.rest.split('/').filter((part) => !PUBLIC_ENTRY.test(part))
+  if (parts[0] === ASSETS_SEGMENT) return null
   if (from?.role === 'shared' && sharedItem(from.rest) === sharedItem(to.rest)) return null
   if (parts.length > SHARED_ITEM_DEPTH) return `${to.folder}는 세그먼트 또는 항목 진입점까지만 import한다(@${to.folder}/lib/<항목>).`
   if (parts.length === 1 && ITEM_ENTRY_SEGMENTS.has(parts[0])) return `${to.folder}/${parts[0]}/<항목>처럼 항목 진입점으로 import한다.`
   return null
 }
 
-function slicedImportProblem(from, to) {
-  if (isCrossImportFor(from, to)) return null
+const isSliceEntry = (inner) => inner.length === 0 || (inner.length === 1 && PUBLIC_ENTRY.test(inner[0]))
+
+function foreignImportProblem(to, isEntry) {
   const consumer = crossImportConsumer(to)
   if (consumer) return `${to.folder}/${to.slice}/@x/${consumer}는 같은 레이어의 ${consumer} 슬라이스 전용이다. 다른 곳은 공개 API(index.ts)로 가져온다.`
-  const inner = to.rest.split('/').slice(1)
-  const isEntry = inner.length === 0 || (inner.length === 1 && PUBLIC_ENTRY.test(inner[0]))
+  return isEntry ? null : `${to.folder}/${to.slice}는 공개 API(index.ts)로만 import한다.`
+}
+
+function slicedImportProblem(from, to) {
+  if (isCrossImportFor(from, to)) return null
+  const isEntry = isSliceEntry(to.rest.split('/').slice(1))
   const isOwnSlice = from?.role === to.role && from.slice === to.slice
-  if (!isOwnSlice) return isEntry ? null : `${to.folder}/${to.slice}는 공개 API(index.ts)로만 import한다.`
+  if (!isOwnSlice) return foreignImportProblem(to, isEntry)
   return isEntry ? '슬라이스 안에서 자기 공개 API를 import하지 않는다(순환 참조).' : null
 }
 
