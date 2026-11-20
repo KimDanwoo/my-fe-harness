@@ -7,6 +7,13 @@
 
 ### Added
 
+- **`my-fe-harness/eslint` 진입점** — 프로젝트 ESLint 설정이 하네스 규칙을 복사하지 않고 가져다 쓴다(`plugin`, `quality(projectConfigs)`).
+  labs처럼 플러그인 사본을 두면 원본과 어긋난다(labs 사본에는 `no-relative-import`가 빠져 있었다). 기본 잠금은 프로젝트가 이미 등록한
+  `harness` 플러그인 객체를 재사용해, 훅이 프로젝트 설정 위에 덧씌울 때 `Cannot redefine plugin`으로 깨지지 않는다.
+  재사용한 플러그인에 없는 규칙은 켜지 않아, 버전 차이로 설정 에러가 나서 훅이 잠금 전체를 조용히 건너뛰는 일을 막는다.
+  - 업그레이드: 이미 설치한 훅 사본(`~/.claude/hooks`·프로젝트 `.claude/hooks`)은 자동으로 바뀌지 않는다. `lint-guard --global --force`(또는 프로젝트에서 `--force`)로 다시 설치한다.
+  - `package.json`에 `exports`가 생겨 `my-fe-harness/scripts/...` 같은 깊은 import는 막힌다(지금까지 쓰는 곳은 없었다).
+
 - **상대경로 import 잠금** — 플러그인에 `harness/no-relative-import`를 추가하고 기본 잠금이 `*.{js,jsx,ts,tsx}`에 켠다(`*.config.*`·`*.d.ts` 제외).
   규칙 팩에만 있던 "`./`·`../` 금지 — 같은 폴더도 별칭 전체 경로로"를 기계가 지킨다. 파일마다 가장 가까운 tsconfig·jsconfig의 `paths`(주석·끝 쉼표 허용, `baseUrl` 반영)를
   읽어 가져오는 파일과 대상이 모두 별칭 범위 안일 때만 잡는다. import·재수출·동적 import·타입 위치 `import()`(`typeof import('./x')`, 식 없는 백틱 경로 포함)를 보고, 가장 구체적인 별칭으로 바꿀 경로를 메시지에 주고 `--fix`로 바꾼다(따옴표 모양 유지). ESLint 기본 `no-restricted-imports`를 쓰지 않는 이유:

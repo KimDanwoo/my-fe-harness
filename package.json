@@ -6,6 +6,10 @@
   "bin": {
     "my-fe-harness": "bin/my-fe-harness.mjs"
   },
+  "exports": {
+    "./eslint": "./scripts/eslint.mjs",
+    "./package.json": "./package.json"
+  },
   "files": [
     "bin",
     "src",
