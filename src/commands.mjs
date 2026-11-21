@@ -108,8 +108,9 @@ export function runVerifyGate(options) {
     title: '검증 게이트 설치',
     hookAddedLabel: 'PreToolUse 훅 추가',
   })
-  console.log('\n  → 커밋 전에 이 세션이 검증(verify 스킬·테스트·e2e)을 돌렸는지 보고, 변경을 판정하는 검사(lint 설정·잠금 테스트·훅)를 고치려면 승인을 받게 한다.')
-  console.log('    모드: MY_FE_HARNESS_VERIFY_GATE=observe(기본, 기록만 ~/.claude/my-fe-harness/verify-gate.log) | enforce | off')
+  console.log('\n  → 커밋 전에 이 세션이 검증(verify 스킬·테스트·e2e)을 돌렸는지, PR 전에 독립 리뷰(code-reviewer·code-review·ask-codex)를 받았는지 보고,')
+  console.log('    변경을 판정하는 검사(lint 설정·잠금 테스트·훅)를 고치려면 승인을 받게 한다.')
+  console.log('    모드: MY_FE_HARNESS_VERIFY_GATE(커밋·검사 보호)·MY_FE_HARNESS_REVIEW_GATE(PR) = observe(기본, 기록만 ~/.claude/my-fe-harness/verify-gate.log) | enforce | off')
 }
 
 export function runLintGuard(options) {
@@ -527,7 +528,7 @@ my-fe-harness — 프론트엔드 컨벤션 하네스
                         구조: ${STRUCTURES.map((s) => s.id).join(' | ')}
   guard                 안전장치 강제 훅 설치 (.claude/settings.json + hooks/)
                         비밀 하드코딩·비밀 파일 커밋·치명적 삭제를 실행 전 차단
-  verify-gate           검증 게이트 설치 (커밋 전 검증 여부·검사 파일 보호, 기본 관찰 모드)
+  verify-gate           검증 게이트 설치 (커밋 전 검증·PR 전 독립 리뷰·검사 파일 보호, 기본 관찰 모드)
   verify-skill          대상 프로젝트에 verify 스킬(.claude/skills/verify)과 화면 비교 스크립트(scripts/verify/)를 깜
                         package.json에서 검사·빌드·e2e 명령과 Next/Astro 경로를 감지해 채움
                         (기존 파일은 --force 없이는 보존, uninstall이 걷어냄, 프로젝트 전용)
