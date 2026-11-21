@@ -6,7 +6,7 @@
 
 **Claude Code용 프론트엔드 컨벤션 하네스**
 
-규칙은 컨텍스트로 *주입*, 안전장치는 훅으로 *강제*, 구조는 코드에서 *되읽어 검증*.
+규칙은 컨텍스트로 *주입*, 규칙은 ESLint로 *잠그고*, 안전장치는 훅으로 *차단*, 구조는 코드에서 *되읽어 검증*.
 
 [![CI](https://github.com/KimDanwoo/my-fe-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/KimDanwoo/my-fe-harness/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
@@ -22,34 +22,32 @@
 규칙을 한 곳(`rules/`)에 정의하고 각 프로젝트의 `.claude/rules/`로 배포하면,
 Claude Code가 **해당 파일을 편집할 때 자동으로 로드**해 일관된 스타일로 짜게 만든다.
 
-다만 규칙은 **주입 시점의 스냅샷**이고 코드는 그 뒤로 계속 자란다.
-한 번 심어두고 잊는 하네스는 결국 워터폴이므로, 이 하네스는 세 축으로 동작한다.
+다만 문서로만 둔 규칙은 LLM도 사람도 언젠가 어기고, 코드는 주입 시점 뒤로 계속 자란다.
+그래서 이 하네스는 네 축으로 동작한다.
 
 | 축 | 언제 | 무엇 | 성격 |
 |---|---|---|---|
 | **1. 규칙** | 관련 파일을 편집할 때 | 해당 규칙 팩이 컨텍스트로 로드된다 | 권고 |
-| **2. 안전장치** | 도구 실행 **직전** | `PreToolUse` 훅이 위반을 물리적으로 차단한다 | 강제 |
-| **3. 되읽기** | 원할 때 · CI | `check`가 실제 코드에서 구조 위반을 찾아낸다 | 검증 |
-
-**Claude Code 플러그인** 또는 **의존성 0의 npx CLI**로 설치한다.
+| **2. 잠금** | 파일을 고칠 때 · 편집기 · CI | 규칙 문서의 `잠금:` 줄에 적힌 ESLint 규칙이 위반을 에러로 막는다 | 강제 |
+| **3. 안전장치** | 도구 실행 **직전** | `PreToolUse` 훅이 비밀·치명적 삭제를 차단하고, 검증 없는 커밋을 기록한다(강제 모드면 막는다) | 강제 |
+| **4. 되읽기** | 원할 때 · CI | `check`가 실제 코드 전체에서 구조 위반을 찾아낸다 | 검증 |
 
 ## 빠른 시작
 
 ```bash
-# Claude Code 플러그인 (강제 훅 자동 활성화)
-/plugin marketplace add KimDanwoo/my-fe-harness
-/plugin install my-fe-harness@my-fe-harness
-
-# 또는 설치 없이 npx — 새 프로젝트는 init 한 번으로 규칙·훅·ESLint·CI까지
+# 새 프로젝트 — init 한 번으로 규칙·훅·ESLint 설정·의존성·CI까지
 npx github:KimDanwoo/my-fe-harness init --yes --fsd
 
-# 규칙 팩만 얹을 때 — 권장 린 세트(코어 + 프레임워크)
-npx github:KimDanwoo/my-fe-harness add core react
+# Claude Code 플러그인 — 안전장치·검증 게이트·lint 훅이 모든 프로젝트에서 자동으로 켜진다
+/plugin marketplace add KimDanwoo/my-fe-harness
+/plugin install my-fe-harness@my-fe-harness
 ```
 
-→ `safety`(+강제 훅)·`typescript`·`patterns`·`react`가 `.claude/rules/`에 깔리고,
-이후 Claude가 이 프로젝트에서 **자동으로 지킨다.** 접근성·폼·테스트 등은 필요할 때 `add`로 얹는다.
+→ `safety`·`typescript`·`patterns`·`react`(감지한 프레임워크) 규칙이 `.claude/rules/`에 깔리고, 같은 규칙을 잠그는
+`eslint.config.mjs`와 CI가 함께 깔린다([`init` 한 번으로 까는 것](#init-한-번으로-까는-것)).
+Claude가 고친 파일은 lint 훅이, 사람이 쓴 코드는 편집기·`lint` 스크립트·CI가 **같은 규칙 모듈**로 검사한다.
 같은 규칙이 `AGENTS.md`에도 들어가 **Codex 등 AGENTS.md를 읽는 에이전트도 지킨다**([Codex·다른 에이전트](#codex다른-에이전트--agentsmd)).
+접근성·폼·테스트 등은 필요할 때 `add`로 얹는다.
 
 ---
 
@@ -76,7 +74,7 @@ LLM에게는 "이렇게 하라"는 문장보다 **틀린 코드와 옳은 코드
 | 팩 | 별칭 | 내용 |
 |---|---|---|
 | `a11y` | `accessibility` | 웹 접근성(WCAG AA) — 시맨틱·키보드·포커스·ARIA·대비 |
-| `styling` | `style`, `design` | 디자인 토큰·테마·다크모드·반응형·모션 |
+| `styling` | `style`, `design`, `tokens` | 디자인 토큰·테마·다크모드·반응형·모션 |
 | `forms` | `form` | 스키마 검증·상태·제출·폼 라이브러리 |
 | `frontend` | `front`, `fe` | 데이터·에러·SEO·성능·국제화 |
 | `testing` | `test` | 동작 중심 테스트·Testing Library·flaky 방지 |
@@ -97,7 +95,7 @@ LLM에게는 "이렇게 하라"는 문장보다 **틀린 코드와 옳은 코드
 - 규칙 설치 + `src/` 스캐폴드(레이어별 역할·의존 규칙 README)가 함께 된다.
 - 각 규칙에 **"이 코드 어디에 두지?" 배치 결정 규칙**, **안티패턴**, **❌/✅ import 예시**가 들어 있다.
 - 구조 팩끼리는 상충하므로 `add all`에 포함되지 않는다 — 명시적으로 하나만 고른다.
-- 여기 적힌 의존 방향이 곧 [`check`](#3-되읽기--check로-구조-부식-점검)의 판정 근거다.
+- 여기 적힌 의존 방향이 곧 [`check`](#4-되읽기--check로-구조-부식-점검)의 판정 근거다.
 
 ## 규칙 로딩 — 토큰 최소화 설계
 
@@ -163,58 +161,30 @@ load_reason=path_glob_match  patterns.md, react.md, typescript.md, fsd.md   ← 
 
 ---
 
-# 2. 안전장치 — 권고 + 강제(2중 방어)
+# 2. 잠금 — 규칙을 ESLint로
 
-Claude Code는 `.claude/rules/`를 **컨텍스트(권고)로만** 취급한다 — 공식 문서도
-"어떤 규칙도 LLM이 무시할 수 있으며, 무조건 막으려면 `PreToolUse` 훅을 쓰라"고 명시한다
-([hooks 문서](https://docs.claude.com/en/docs/claude-code/hooks)). 그래서 안전장치만 2층으로 둔다.
+규칙 문서는 권고라서, 막는 장치가 없으면 LLM이 그 자리에 어긴 코드를 박아 넣는다.
+그래서 각 규칙 문서의 절 끝에 `잠금:` 줄로 그 절의 규칙 중 ESLint가 강제하는 것을 적고, 하네스가 그 규칙을 켠다.
+적힌 규칙이 막는 항목만 기계가 지키고, 나머지는 판단이 필요한 권고다. 문서와 실제 설정이 어긋나지 않게 테스트(`test/ruleDocs`)가 양쪽을 대조한다.
 
-| 층 | 무엇 | 성격 |
+| 규칙 | 막는 것 | 문서 |
 |---|---|---|
-| `safety.md` (규칙) | LLM에게 "왜"를 설명 — 항상 로드·최우선 | **권고** |
-| `safety-guard.mjs` (훅) | 도구 실행 **전에** 위반을 물리적으로 차단 | **강제** |
+| `no-nested-ternary` · `complexity`(10) · `max-depth`(3) · `max-lines-per-function`(120) | 중첩 삼항, 복잡한·깊은·긴 함수 | `patterns` |
+| `no-magic-numbers`(TS면 `@typescript-eslint/no-magic-numbers`) | 컴포넌트·훅의 이름 없는 숫자(`-1·0·1·2·100` 제외, `config/`·`constants`·테스트 제외) | `patterns` |
+| `harness/named-condition` | `if`·삼항·`while` 조건에 바로 쓴 `&&`·`\|\|`, `is`·`has`·`should`·`can`이 아닌 조건 변수 이름 | `patterns` |
+| `harness/no-comment` | 주석·JSDoc(도구 지시문·shebang 제외) | `patterns` |
+| `harness/component-body` · `harness/no-direct-effect` | 컴포넌트 본문의 핸들러 아닌 함수·중첩 컴포넌트, 직접 부른 `useEffect`·`useLayoutEffect`(Next `error`·`global-error` 파일 제외) | `patterns` |
+| `harness/max-props` · `harness/no-store-passthrough` · `harness/component-markup` · `max-lines`(250) | props 6개 이상, 구독한 store 값 릴레이, JSX 깊이 5·HTML 요소 15개 초과, 긴 컴포넌트 파일 | `patterns` |
+| `harness/no-relative-import` | 별칭이 있는 프로젝트의 `./`·`../` import(`--fix`로 별칭 경로로 바뀐다) | `typescript`·`fsd` |
+| `fsd/*` 6개 | 레이어 방향·공개 API·세그먼트 구조 등 — [FSD 구조 잠금](#fsd-구조-잠금--fsdoptions) | `fsd` |
 
-강제 훅이 `PreToolUse`에서 막는 것 — LLM이 무시하려 해도 불가능:
+- `harness/*`는 의존성 0인 ESLint 플러그인(`scripts/lint-guard-plugin.mjs`), 기본 잠금 묶음은 `scripts/lint-guard-baseline.mjs`, `fsd/*`는 `scripts/lint-guard-fsd.mjs`에 있다.
+  lint 훅과 프로젝트 `eslint.config`가 **같은 모듈**을 가져다 쓴다.
+- 테스트 파일은 매직넘버·컴포넌트 본문·함수 길이 잠금에서 빠진다. 규칙 끄는 인라인 주석(`eslint-disable`)은 무시된다(`noInlineConfig`) — 예외는 설정 파일 한 곳에만 둔다.
 
-1. **하드코딩된 실제 비밀** 쓰기(개인키·AWS·GitHub·OpenAI·Anthropic·Slack·Google·Stripe 등).
-   `.env*` 파일은 예외(비밀의 정당한 위치).
-2. **비밀 파일 커밋** — `.env`·`*.pem`·`id_rsa`·`credentials` 등의 `git add`/`commit`.
-3. **치명적 삭제** — `rm -rf`로 루트(`/`)·홈(`~`·`$HOME`) 통째 삭제.
+## 린트 강제 훅 — Claude가 고친 파일을 그 자리에서
 
-설계상 안전(=신뢰성):
-
-- **정상 작업엔 무간섭** — 위 3가지 외에는 아무 출력 없이 통과. 컨텍스트·**토큰 0**, 방해 0.
-- **fail-open** — 훅 내부 오류·미지의 입력은 전부 통과. 훅이 세션을 절대 깨지 않는다.
-- **의존성 0** — 순수 Node 스크립트. 플러그인이면 자동, npx면 `guard`로 설치.
-
-```bash
-# 플러그인 없이 쓸 때 — 강제 훅을 프로젝트에 설치(.claude/settings.json 병합, idempotent)
-npx github:KimDanwoo/my-fe-harness guard
-```
-
-> 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
-> 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
-
-### 검증 게이트 — 증거 없이 커밋하지 않게, 변경이 자기 검사를 고치지 못하게
-
-[Claude Code 팀의 검증 원칙](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/)을 PreToolUse 훅으로 옮겼다(`verify-gate.mjs`).
-
-| 대상 | 하는 일 |
-|---|---|
-| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과 |
-| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) |
-
-- 모드 `MY_FE_HARNESS_VERIFY_GATE`: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`.
-  새 게이트는 관찰 모드로 시작해 오탐을 확인한 뒤 강제로 바꾼다.
-
-```bash
-npx github:KimDanwoo/my-fe-harness verify-gate --global
-```
-
-### 린트 강제 훅 — 규칙 문서를 지키게 만드는 계층
-
-규칙 문서(중첩 삼항 금지, 컴포넌트 본문 규칙, 매직넘버 금지 등)는 권고라서, 막는 장치가 없으면 LLM이 그 자리에 박아 넣는다.
-`lint-guard.mjs`는 **그 프로젝트의 ESLint 설정**을 그대로 써서 Claude의 작업을 검사한다.
+`lint-guard.mjs`는 **그 프로젝트의 ESLint 설정**에 하네스 기본 잠금을 얹어 Claude의 작업을 검사한다.
 
 | 이벤트 | 하는 일 |
 |---|---|
@@ -222,26 +192,10 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 | `Stop` | 이번 작업에서 바뀐 파일(`git diff HEAD` + 새 파일)에 에러가 남아 있으면 끝내지 못하게 한다. 같은 세션 3번까지만 막는다(무한 반복 방지) |
 
 - **fail-open** — `node_modules/.bin/eslint`가 없는 프로젝트, ESLint 설정 오류, 시간 초과는 전부 통과.
-- **잠금 자체는 프로젝트 ESLint에 있다** — 이 훅은 그 결과를 Claude에게 즉시 돌려주는 통로다. 어떤 규칙을 켤지는 프로젝트가 정한다.
-- 기존 lint 에러가 많은 프로젝트에서는 파일을 건드릴 때마다 그 파일의 에러를 같이 고치게 된다. 그래서 npx 설치는 프로젝트별 선택(opt-in)이다.
+- **어느 프로젝트에서든**: 프로젝트 ESLint가 있으면 그 설정 아래에 기본 잠금을 깔고, 없으면 `--global` 설치 때 받은 런타임(`~/.claude/my-fe-harness-runtime`)으로 기본 잠금만 검사한다.
+  `fsd/*`는 프로젝트 설정에 `fsd()`가 있을 때만 돈다.
+- 기존 lint 에러가 많은 프로젝트에서는 파일을 건드릴 때마다 그 파일의 에러를 같이 고치게 된다. 훅은 손댄 파일만 보므로 기존 부채는 그 파일을 고칠 때 함께 정리된다.
 - 프로젝트가 ESLint 일괄 억제(`eslint-suppressions.json`)로 기존 부채를 묶어 두었어도, 훅은 빈 억제 파일(`--suppressions-location`)로 검사한다. 억제는 CI가 새 부채를 막는 장치이고, 손댄 파일은 부채까지 고친다.
-- **어느 프로젝트에서든**: 프로젝트 ESLint가 있으면 그 설정 아래에 하네스 기본 잠금(`lint-guard-baseline.mjs` — 중첩 삼항·복잡도·깊이·
-  길이·매직넘버·인라인 끄기 금지·컴포넌트 본문 규칙)을 깔고, 없으면 `--global` 설치 때 받은 런타임(`~/.claude/my-fe-harness-runtime`)으로 기본 잠금만 검사한다.
-- **컴포넌트 본문 규칙**(`lint-guard-plugin.mjs`, 의존성 0인 ESLint 플러그인 `harness`) — `*.tsx`·`*.jsx`의 최상위 컴포넌트(memo·forwardRef 포함)에서
-  `harness/component-body`(본문 최상위에는 `handleXxx`·`onXxx` 핸들러만 함수로 둔다, 중첩 컴포넌트 금지)와
-  `harness/no-direct-effect`(`useEffect`·`useLayoutEffect` 직접 호출 금지 — `error.tsx`·`global-error.tsx`는 허용)를 error로 켠다.
-  `useCallback` 등 호출식에 담은 함수와 커스텀 훅은 허용하고, 테스트 파일은 끈다. 플러그인 파일은 기본 잠금과 함께 `.claude/hooks/`·런타임 폴더에 복사된다.
-- **합성 컴포넌트 규칙**(같은 플러그인) — `harness/max-props`(props 6개 이상 금지, `extends`로 받은 기본 속성은 세지 않음)와
-  `harness/component-markup`(컴포넌트 하나의 JSX 깊이 최대 5·HTML 요소 최대 15개)를 error로 켠다. 상태를 props로 릴레이하거나 한 화면에 마크업을 쌓는 대신
-  Root가 상태를 context로 내려주고 파트가 구독하는 합성 컴포넌트, children 조립, 설정 배열 + map으로 나누게 한다.
-- **상대경로 import 금지**(같은 플러그인) — `harness/no-relative-import`가 `*.{js,jsx,ts,tsx}`의 `./`·`../` import·재수출·동적 import·타입 위치 `import()`(백틱 경로 포함)를 막고
-  바꿀 별칭 경로를 알려준다(`--fix`로 자동으로 바뀐다 — 훅이 고친 파일에 먼저 돌린다). 파일마다 가장 가까운 `tsconfig.json`·`jsconfig.json`의 `paths`를 읽어, 가져오는 파일과 대상이 **둘 다 별칭 범위 안일 때만** 잡는다 —
-  별칭이 없는 프로젝트, node로 바로 도는 `.mjs`·`.cjs`, 별칭 밖 스크립트, `*.config.*`, `*.d.ts`는 건드리지 않는다. 모노레포는 앱마다 자기 별칭을 쓴다.
-- **주석 금지**(같은 플러그인) — `harness/no-comment`가 모든 JS·TS 파일(테스트 포함)의 주석을 막는다. JSDoc·링크를 단 주석도 막고,
-  도구가 읽는 지시문(`@ts-expect-error`, `/// <reference>`, `@vitest-environment`·`@jest-environment`, `webpack*`·`@vite-ignore` 매직 주석, `prettier-ignore`)과 shebang만 통과시킨다.
-  허용 목록은 `lint-guard-baseline.mjs`의 `TOOL_DIRECTIVES` 한 곳에 있다. 훅은 손댄 파일만 보므로 기존 주석은 그 파일을 고칠 때 함께 정리된다.
-- **조건에 이름**(같은 플러그인) — `harness/named-condition`이 `if`·삼항·`while`·`do-while` 조건에 `&&`·`||`를 바로 쓰는 것을 막고(`!(a && b)` 포함),
-  조건 자리에 쓴 변수가 비교식이나 `&&`·`||` 조건을 담고 있으면 이름이 `is`·`has`·`should`·`can`으로 시작하는지 본다. 자동 수정은 없다.
 - 고친 파일은 `eslint --fix`로 먼저 자동 수정하고, 끝낼 때는 그 세션·그 에이전트가 고친 파일만 본다. 서브에이전트 종료(SubagentStop)도 검사한다.
 - 끄기: 환경변수 `MY_FE_HARNESS_LINT_GUARD=off`.
 
@@ -250,10 +204,11 @@ npx github:KimDanwoo/my-fe-harness verify-gate --global
 npx github:KimDanwoo/my-fe-harness lint-guard
 ```
 
-#### 프로젝트 lint·CI에서 같은 규칙 쓰기 — `my-fe-harness/eslint`
+## 프로젝트 lint·CI에서 같은 규칙 쓰기 — `my-fe-harness/eslint`
 
 훅은 Claude가 고친 파일만 본다. 사람이 쓴 코드와 CI도 같은 기준을 받으려면 프로젝트 ESLint 설정이 하네스를 직접 가져다 쓴다.
 규칙을 복사해 두지 않으므로 하네스를 올리면 프로젝트 규칙도 같이 바뀐다.
+`init`이 이 설정·의존성·CI를 깔아 준다([`init` 한 번으로 까는 것](#init-한-번으로-까는-것)). 아래는 이미 있는 설정에 직접 합칠 때의 형태다.
 
 ```js
 // eslint.config.mjs — devDependencies에 "my-fe-harness": "github:KimDanwoo/my-fe-harness#<태그>"
@@ -271,7 +226,7 @@ export default [...quality(projectConfigs), ...projectConfigs]
 - 도입하면 바뀌는 것: 규칙 끄는 인라인 주석(`eslint-disable`)이 무시된다(`noInlineConfig`), `public/`·`vendor/`·`generated/` 등은 검사하지 않는다,
   별칭이 있는 프로젝트의 `./`·`../` import가 에러가 된다(`--fix`로 바뀜). ESLint 9 이상(flat config)이 필요하다.
 
-#### FSD 구조 잠금 — `fsd(options)`
+## FSD 구조 잠금 — `fsd(options)`
 
 ```js
 import { fsd, quality } from 'my-fe-harness/eslint'
@@ -299,7 +254,57 @@ export default [...quality(projectConfigs), ...projectConfigs, ...fsd({ next: tr
 - 파서는 프로젝트 설정이 맡는다(`.ts`·`.tsx`를 읽는 파서가 먼저 있어야 한다). 플러그인 이름은 `fsd`라 같은 이름의 다른 플러그인과 같이 쓰면 `Cannot redefine plugin`이 난다.
 - 상대경로 금지는 `quality()`의 `harness/no-relative-import`가 맡는다(별칭이 있는 프로젝트에서 동작). 두 프리셋을 같이 쓴다.
 
-### verify 스킬 틀 — `verify-skill`
+---
+
+# 3. 안전장치 — 권고 + 강제(2중 방어)
+
+Claude Code는 `.claude/rules/`를 **컨텍스트(권고)로만** 취급한다 — 공식 문서도
+"어떤 규칙도 LLM이 무시할 수 있으며, 무조건 막으려면 `PreToolUse` 훅을 쓰라"고 명시한다
+([hooks 문서](https://docs.claude.com/en/docs/claude-code/hooks)). 코드 스타일은 ESLint가 잠그고, ESLint가 볼 수 없는 위험(비밀·삭제·커밋)은 규칙 문서와 훅 2층으로 막는다.
+
+| 층 | 무엇 | 성격 |
+|---|---|---|
+| `safety.md` (규칙) | LLM에게 "왜"를 설명 — 항상 로드·최우선 | **권고** |
+| `safety-guard.mjs` (훅) | 도구 실행 **전에** 위반을 물리적으로 차단 | **강제** |
+
+강제 훅이 `PreToolUse`에서 막는 것 — LLM이 무시하려 해도 불가능:
+
+1. **하드코딩된 실제 비밀** 쓰기(개인키·AWS·GitHub·OpenAI·Anthropic·Slack·Google·Stripe 등).
+   `.env*` 파일은 예외(비밀의 정당한 위치).
+2. **비밀 파일 커밋** — `.env`·`*.pem`·`id_rsa`·`credentials` 등의 `git add`/`commit`.
+3. **치명적 삭제** — `rm -rf`로 루트(`/`)·홈(`~`·`$HOME`) 통째 삭제.
+
+설계상 안전(=신뢰성):
+
+- **정상 작업엔 무간섭** — 위 3가지 외에는 아무 출력 없이 통과. 컨텍스트·**토큰 0**, 방해 0.
+- **fail-open** — 훅 내부 오류·미지의 입력은 전부 통과. 훅이 세션을 절대 깨지 않는다.
+- **의존성 0** — 순수 Node 스크립트. 플러그인이면 자동, npx면 `guard`로 설치.
+
+```bash
+# 플러그인 없이 쓸 때 — 강제 훅을 프로젝트에 설치(.claude/settings.json 병합, idempotent)
+npx github:KimDanwoo/my-fe-harness guard
+```
+
+> 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
+> 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
+
+## 검증 게이트 — 증거 없이 커밋하지 않게, 변경이 자기 검사를 고치지 못하게
+
+[Claude Code 팀의 검증 원칙](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/)을 PreToolUse 훅으로 옮겼다(`verify-gate.mjs`).
+
+| 대상 | 하는 일 |
+|---|---|
+| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과 |
+| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) |
+
+- 모드 `MY_FE_HARNESS_VERIFY_GATE`: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`.
+  새 게이트는 관찰 모드로 시작해 오탐을 확인한 뒤 강제로 바꾼다.
+
+```bash
+npx github:KimDanwoo/my-fe-harness verify-gate --global
+```
+
+## verify 스킬 틀 — `verify-skill`
 
 커밋·PR 전에 "실제로 앱을 띄워 증거로 확인"하는 절차(`verify` 스킬)와 기준 커밋 대비 화면 비교 스크립트를 대상 프로젝트에 깐다.
 
@@ -316,7 +321,7 @@ npx github:KimDanwoo/my-fe-harness verify-skill   # 프로젝트 루트에서(�
 
 ---
 
-# 3. 되읽기 — `check`로 구조 부식 점검
+# 4. 되읽기 — `check`로 구조 부식 점검
 
 규칙은 설치 시점에 주입되지만 코드는 그 뒤로 계속 자란다.
 **설치한 구조 규칙이 지금 코드에서 지켜지고 있는지**는 코드를 되읽어야만 알 수 있다.
@@ -374,8 +379,9 @@ npx github:KimDanwoo/my-fe-harness check
 /plugin install my-fe-harness@my-fe-harness
 ```
 
-설치하면 **안전장치 강제 훅이 자동 활성화**되고, TS/React/Vue·커밋·구조 작업 시 규칙 요약을 적용하는
-**스킬**과 아래 슬래시 커맨드가 붙는다.
+설치하면 모든 프로젝트에서 **안전장치 훅·검증 게이트(관찰 모드)·린트 강제 훅이 자동 활성화**되고(`hooks/hooks.json`),
+TS/React/Vue·커밋·구조 작업 시 규칙 요약을 적용하는 **스킬**과 아래 슬래시 커맨드가 붙는다.
+플러그인은 `eslint.config.mjs`·의존성·CI를 프로젝트에 깔지 않는다 — 편집기·CI까지 같은 잠금을 받으려면 프로젝트마다 `init`을 돌린다.
 
 | 커맨드 | 하는 일 |
 |---|---|
@@ -386,13 +392,14 @@ npx github:KimDanwoo/my-fe-harness check
 | `/my-fe-harness:update` | 안 건드린 규칙만 최신 원본으로 갱신 |
 | `/my-fe-harness:guard` | (플러그인 없이 쓸 때) 강제 훅을 프로젝트에 설치 |
 | `/my-fe-harness:uninstall` | 설치한 규칙·훅을 안전하게 걷어냄(해시 검증, 수정본 보존) |
+| `/my-fe-harness:list` | 설치할 수 있는 팩·구조 목록 |
 
 직접 불러 쓰는 작업 스킬도 함께 들어 있다. 자동으로 발동하지 않고 이름을 입력할 때만 실행된다.
 
 | 스킬 | 하는 일 |
 |---|---|
 | `/my-fe-harness:state-machine-hunter` | 앱에 숨은 암묵적 상태 머신을 찾아 UX·DX·AX를 함께 개선할 결정을 내린다 |
-| `/my-fe-harness:bug-triager` | 버그를 빈도×심각도(각 1–10)로 점수화 — 곱이 5 미만이면 코드를 건드리지 않고 이슈로만 남긴다(등록 전 확인) |
+| `/my-fe-harness:bug-triager` | 버그를 빈도×심각도(각 1–10)로 점수화 — 곱이 25 미만이면 코드를 건드리지 않고 이슈로만 남긴다(등록 전 확인) |
 | `/my-fe-harness:ci-auditor [실행 횟수]` | `gh`로 최근 CI 실행(기본 150회)을 대기·셋업·실행 세 단계로 나눠 가장 느린 작업 5개를 보고한다(코드 수정 없음) |
 
 ## B. npx CLI (의존성 0)
@@ -414,8 +421,8 @@ npx github:KimDanwoo/my-fe-harness init --yes --fsd
 |---|---|
 | 1 | 규칙 팩(`.claude/rules/`)·`AGENTS.md` 블록 → 폴더 구조(고른 경우) |
 | 2 | 안전장치 훅(`guard`) · 린트 강제 훅(`lint-guard`) · 검증 게이트(`verify-gate`, 관찰 모드) |
-| 3 | `eslint.config.mjs` — `quality()` + (FSD 구조면) `fsd()`. Next·jotai·`src/_app`·`src/_pages`를 감지해 옵션을 채우고, `.claude/`·빌드 산출물은 무시한다 |
-| 4 | `package.json` — 없을 때만 `my-fe-harness`(`#v<지금 버전>` 고정)·`eslint`·`typescript-eslint`(TS일 때), `lint`·`typecheck` 스크립트 |
+| 3 | `eslint.config.mjs` — `quality()` + (FSD 구조인 TypeScript 프로젝트면) `fsd()`. Next·jotai·`src/_app`·`src/_pages`를 감지해 옵션을 채우고, `.claude/`·빌드 산출물은 무시한다 |
+| 4 | `package.json` — 없을 때만 `my-fe-harness`(`#v<지금 버전>` 고정)·`eslint`·`typescript-eslint`·`typescript`(TS일 때), `lint`·`typecheck` 스크립트 |
 | 5 | 의존성 설치 — lockfile로 감지한 매니저(pnpm·npm·yarn·bun)로 설치. `--no-install`이면 건너뛰고 설치 명령을 안내한다 |
 | 6 | `.github/workflows/harness.yml` — PR·main 푸시에 설치 → `lint` → `typecheck`(스크립트가 있을 때). 권한은 `contents: read` |
 
@@ -461,18 +468,23 @@ CI 등 비-TTY 환경에서는 `init --yes`(구조는 `--structure`·`--fsd`)를
 
 ## 설치 결과
 
+`init --yes --fsd` 기준:
+
 ```
 my-project/
 ├── AGENTS.md                         # 마커 블록에 같은 규칙 — Codex 등이 읽음(블록 밖 내용은 보존)
+├── eslint.config.mjs                 # quality() + fsd()(TS) — 편집기·lint 스크립트·CI가 쓰는 잠금(이미 있으면 유지)
+├── package.json                      # my-fe-harness·eslint 등 devDependencies, lint·typecheck 스크립트(없을 때만 추가)
+├── .github/workflows/harness.yml     # PR·main 푸시에 lint·typecheck(이미 lint를 돌리는 workflow가 있으면 생략)
 ├── .claude/
-│   ├── .my-fe-harness-manifest.json  # 설치본 sha256 기록 — 안전한 uninstall용
+│   ├── .my-fe-harness-manifest.json  # 설치본 sha256 기록 — 안전한 update·uninstall용
+│   ├── settings.json                 # 안전장치·검증 게이트·린트 강제 훅 배선(기존 내용에 병합)
+│   ├── hooks/                        # 훅 스크립트와 기본 잠금 모듈
 │   └── rules/                        # 선택한 팩 — Claude Code가 자동 로드
 │       ├── _stack.md                 # 감지된 스택·컨벤션 스탬프
-│       ├── typescript.md
-│       ├── patterns.md
-│       └── feature-based.md          # 선택한 구조 규칙 (배치 규칙 + 안티패턴)
+│       ├── safety.md  typescript.md  patterns.md  react.md
+│       └── fsd.md                    # 선택한 구조 규칙 (배치 규칙 + 안티패턴 + 잠금)
 └── src/                              # 선택한 구조로 스캐폴드 (레이어별 README 포함)
-    ├── app/  ├── pages/  ├── features/  └── shared/
 ```
 
 - 기존 파일은 절대 덮어쓰지 않는다(`--force`를 명시했을 때만).
@@ -529,9 +541,9 @@ Codex는 `.claude/rules/`를 읽지 않고 `AGENTS.md`를 읽는다(전역 `~/.c
 my-fe-harness/
 ├── assets/logo.svg        # 대표 아이콘
 ├── rules/                 # 규칙 팩 원본 (단일 진실원천, safety.md 포함)
-├── bin/ src/              # 의존성 0개 npx CLI (check.mjs = 구조 되읽기)
-├── scripts/               # safety-guard.mjs — 강제 훅 스크립트(의존성 0)
-├── hooks/hooks.json       # 플러그인 PreToolUse 훅 배선
+├── bin/ src/              # 의존성 0개 npx CLI (init·add·check·status·update·uninstall)
+├── scripts/               # 훅 스크립트(safety-guard·verify-gate·lint-guard)와 ESLint 진입점(eslint.mjs = my-fe-harness/eslint)
+├── hooks/hooks.json       # 플러그인 훅 배선(PreToolUse·PostToolUse·Stop·SubagentStop)
 ├── commands/              # 플러그인 슬래시 커맨드
 ├── skills/                # 플러그인 스킬 (컨벤션 자동 적용 + 직접 호출 작업 스킬)
 ├── test/                  # node:test 검증 스위트
@@ -552,6 +564,8 @@ npm test        # 또는 node --test
 - `test/initProject` — `init`의 ESLint 설정·package.json·CI 생성과 보존 규칙, 모노레포, `uninstall`, ESLint로 넘긴 FSD `check`(런타임이 있으면 실제 ESLint로 생성 설정 로드)
   \+ 매니페스트·스탬프 낡음·구조 위반 판정·경로 탈출 방어 (임시 디렉토리, 실제 `~` 미변경).
 - `test/guard` — 비밀·비밀 파일 커밋·`rm -rf` 차단 + 오탐 방지 매트릭스.
+- `test/ruleDocs` — 규칙 문서의 `잠금:` 줄과 실제로 켜지는 ESLint 규칙이 서로 빠짐없이 맞는지, 문서에 적은 `harness/`·`fsd/` 규칙 이름이 실재하는지.
+- 그 밖에 규칙별(`namedCondition`·`noComment`·`componentBody`·`noRelativeImport`·`fsd`)·훅별(`lintGuard`·`verifyGate`) 테스트가 있다.
 
 # License
 

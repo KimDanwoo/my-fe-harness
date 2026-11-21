@@ -86,7 +86,8 @@ import { formatPrice } from '@/features/cart'
 ```
 
 - 공개 경계마다 `index.ts`, 외부는 배럴로만. `export *`·기계적 배럴 금지.
-- import 순서: 외부 → 내부 별칭(절대경로). **상대경로(`./`·`../`) 금지** — 같은 폴더 파일도 별칭 전체 경로로(기본 잠금 `harness/no-relative-import`). **순환 의존 금지.**
+- import 순서: 외부 → 내부 별칭(절대경로). **상대경로(`./`·`../`) 금지** — 같은 폴더 파일도 별칭 전체 경로로(설정 파일·`.d.ts`는 예외). **순환 의존 금지.**
+- 잠금: `harness/no-relative-import`
 
 ## 네이밍 · 시그니처
 
