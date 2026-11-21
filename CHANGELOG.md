@@ -5,7 +5,17 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
+### Added
+
+- **리뷰 게이트** — `gh pr create`(`gh pr new`) 전에 이 세션이 마지막 PR 생성 뒤로 독립 리뷰(`code-reviewer` 에이전트, `code-review` 스킬, `ask-codex.py` 실행)를 받았는지 본다.
+  검증 게이트(`verify-gate.mjs`)에 붙어 있고 모드는 `MY_FE_HARNESS_REVIEW_GATE`(기본 `observe` — 막지 않고 기록만)로 따로 켠다.
+  PR 본문에 `Reviewed: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과(커밋 게이트와 따로 센다). 리뷰 지적을 고친 뒤 다시 리뷰받을 필요는 없다.
+
 ### Changed
+
+- 검증 게이트는 실패했거나 훅에 막힌 `git commit`·`gh pr create` 시도를 "마지막 커밋·PR"로 치지 않는다 — 막힌 뒤 검증·리뷰하고 다시 시도하면 통과한다.
 
 - **규칙 문서가 실제 잠금과 맞는다** — 각 절 끝의 `잠금:` 줄에 그 절을 강제하는 ESLint 규칙을 적는다. `잠금:` 줄이 없는 절은 권고다.
   - `patterns`가 켜지지 않는 `react/forbid-elements`를 잠금이라고 적던 줄을 고치고, 문서에 없던 `component-body`·`no-direct-effect`·`max-props`·`no-store-passthrough`·`component-markup`·`max-depth`·`max-lines`를 해당 절에 적었다(합성 컴포넌트 절 추가).

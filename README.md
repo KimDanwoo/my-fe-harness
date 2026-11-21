@@ -29,7 +29,7 @@ Claude Code가 **해당 파일을 편집할 때 자동으로 로드**해 일관�
 |---|---|---|---|
 | **1. 규칙** | 관련 파일을 편집할 때 | 해당 규칙 팩이 컨텍스트로 로드된다 | 권고 |
 | **2. 잠금** | 파일을 고칠 때 · 편집기 · CI | 규칙 문서의 `잠금:` 줄에 적힌 ESLint 규칙이 위반을 에러로 막는다 | 강제 |
-| **3. 안전장치** | 도구 실행 **직전** | `PreToolUse` 훅이 비밀·치명적 삭제를 차단하고, 검증 없는 커밋을 기록한다(강제 모드면 막는다) | 강제 |
+| **3. 안전장치** | 도구 실행 **직전** | `PreToolUse` 훅이 비밀·치명적 삭제를 차단하고, 검증 없는 커밋·리뷰 없는 PR을 기록한다(강제 모드면 막는다) | 강제 |
 | **4. 되읽기** | 원할 때 · CI | `check`가 실제 코드 전체에서 구조 위반을 찾아낸다 | 검증 |
 
 ## 빠른 시작
@@ -288,17 +288,23 @@ npx github:KimDanwoo/my-fe-harness guard
 > 오탐을 극도로 줄이려 **확실한 위반만** 막는다. 더 넓은 정책(예: `dangerouslySetInnerHTML` 차단)은
 > 포크해서 `scripts/safety-guard.mjs`에 규칙을 추가하면 된다.
 
-## 검증 게이트 — 증거 없이 커밋하지 않게, 변경이 자기 검사를 고치지 못하게
+## 검증 게이트 — 증거 없이 커밋하지 않게, 리뷰 없이 PR을 올리지 않게, 변경이 자기 검사를 고치지 못하게
 
 [Claude Code 팀의 검증 원칙](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/)을 PreToolUse 훅으로 옮겼다(`verify-gate.mjs`).
 
-| 대상 | 하는 일 |
-|---|---|
-| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과, 한 세션에서 두 번 막히면 그다음은 통과 |
-| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) |
+| 대상 | 하는 일 | 모드 변수 |
+|---|---|---|
+| `git commit` | 이 세션이 마지막 커밋 뒤로 검증(verify 스킬·`pnpm verify`/`test`/`e2e`·playwright·vitest)을 돌렸는지 트랜스크립트로 확인. 커밋 메시지에 `Verified: none — 이유`를 쓰면 통과 | `MY_FE_HARNESS_VERIFY_GATE` |
+| `gh pr create`(`gh pr new`) | 이 세션이 마지막 PR 생성 뒤로 **독립 리뷰**를 받았는지 확인 — `code-reviewer` 에이전트 호출, `code-review` 스킬, `ask-codex.py` 실행. PR 본문에 `Reviewed: none — 이유`를 쓰면 통과 | `MY_FE_HARNESS_REVIEW_GATE` |
+| 검사 파일 편집 | `eslint.config.*`·`scripts/check-*`·`lintLocks.test.*`·`.claude/hooks/`·`.claude/settings.json`을 고치려면 사용자 승인(ask) | `MY_FE_HARNESS_VERIFY_GATE` |
 
-- 모드 `MY_FE_HARNESS_VERIFY_GATE`: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`.
+- 모드: `observe`(기본 — 막지 않고 `~/.claude/my-fe-harness/verify-gate.log`에 기록) · `enforce` · `off`. 게이트마다 따로 켜고 끈다.
   새 게이트는 관찰 모드로 시작해 오탐을 확인한 뒤 강제로 바꾼다.
+- 한 세션에서 같은 게이트에 두 번 막히면 그다음은 통과시킨다(갇히지 않게). 커밋 게이트와 리뷰 게이트는 따로 센다.
+- 실패했거나 훅에 막힌 커밋·PR 시도는 "마지막 커밋·PR"로 치지 않는다 — 리뷰를 받고 `gh pr create`가 네트워크 오류로 실패해도 다시 리뷰할 필요가 없다.
+- 리뷰 지적을 고친 뒤 다시 리뷰받을 필요는 없다(같은 작업의 리뷰를 반복하지 않게). 다음 PR부터 새 리뷰가 필요하다.
+- 한계: 트랜스크립트로는 리뷰어를 **불렀는지**만 안다 — 리뷰어에게 결론을 넘기지 않았는지, 리뷰가 성공했는지는 보지 않는다.
+  `--body-file`로 본문을 넘기면 `Reviewed: none`이 명령에 보이지 않으니 명령에 함께 적는다. `gh api`로 PR을 만드는 경로는 보지 않는다.
 
 ```bash
 npx github:KimDanwoo/my-fe-harness verify-gate --global
