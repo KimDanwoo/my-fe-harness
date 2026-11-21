@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **규칙 문서가 실제 잠금과 맞는다** — 각 절 끝의 `잠금:` 줄에 그 절을 강제하는 ESLint 규칙을 적는다. `잠금:` 줄이 없는 절은 권고다.
+  - `patterns`가 켜지지 않는 `react/forbid-elements`를 잠금이라고 적던 줄을 고치고, 문서에 없던 `component-body`·`no-direct-effect`·`max-props`·`no-store-passthrough`·`component-markup`·`max-depth`·`max-lines`를 해당 절에 적었다(합성 컴포넌트 절 추가).
+  - `fsd`는 절마다 `fsd/*` 규칙을 적고, 문서에 없던 컴포넌트 파일 규칙(`fsd/component-file`)과 잠금이 도는 조건(`fsd()` 프리셋)을 적었다.
+  - `test/ruleDocs`가 문서의 `잠금:` 줄과 `quality()`·`fsd()`가 켜는 규칙을 양방향으로 대조하고, 문서에 적은 `harness/`·`fsd/` 이름이 실재하는지 본다.
+- **README를 `init` 중심으로** — 빠른 시작을 `init`부터, 축을 규칙·잠금·안전장치·되읽기 넷으로 나누고, 규칙별 설명을 잠금 규칙 표 하나로 모았다. 플러그인이 켜는 훅·설치 결과·프로젝트 구조 설명을 지금 동작에 맞췄다.
+- `bug-triager`가 이슈로만 남기는 기준을 곱 5 미만에서 25 미만으로 올렸다.
+
 ## [0.7.0] - 2026-11-20
 
 ### Added

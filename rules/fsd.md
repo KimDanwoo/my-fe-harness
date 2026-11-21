@@ -65,8 +65,9 @@ import { AddToCartButton } from '@/features/cart'
 
 - features끼리 조합해야 하면 옆 feature를 import하지 말고 **상위(pages)에서 조합**하거나, 조합 지점을
   props·slot으로 열어 바깥에서 끼우게 한다.
-- 같은 레이어 슬라이스 간 참조가 불가피하면(주로 entities 간) **cross-import 공개 API `@x`**로만:
+- 같은 레이어 슬라이스 간 참조가 불가피하면 **entities 레이어에서만** cross-import 공개 API `@x`로:
   `entities/A/@x/B.ts`로 B에게만 노출한다.
+- 잠금: `fsd/independent-slices` `fsd/public-api` — 앞은 레이어 방향·옆 슬라이스 참조를, 뒤는 공개 API를 건너뛴 deep import를 막는다.
 
 ## 공개 API — 슬라이스의 유일한 출입구
 
@@ -87,12 +88,11 @@ entities/user/
   한 파일을 가리키는 import 문자열이 하나로 통일되고, 슬라이스 안에서 파일을 옮겨도 다른 import가 깨지지 않는다.
 - 별칭으로 세그먼트까지 들어가는 건 **같은 슬라이스 안에서만**이다. 슬라이스 밖에서는 공개 API로만.
   자기 `index.ts`는 경유하지 않는다 — 순환 의존이 된다.
-- 강제는 ESLint로: 상대경로는 하네스 기본 잠금 `harness/no-relative-import`가 막고, 레이어·슬라이스 경계·공개 API·세그먼트 구조는
-  `my-fe-harness/eslint`의 `fsd()` 프리셋이 지킨다(가져오는 쪽 위치를 보고 판정해, 같은 슬라이스 안의 별칭 경로는 허용한다).
 - **세그먼트 안에 `index.ts`(배럴)를 두지 않는다**(`model/index.ts`, `model/hooks/index.ts` 등). 출입구는 루트 하나다.
 - 서버 전용 코드(`server-only`, `next/headers`, fs 등)는 `index.ts`에 섞지 않고 `index.server.ts`로 분리한다 —
   클라이언트 번들에 딸려 들어가는 걸 막는다.
 - 테스트는 같은 슬라이스 안에 두고 별칭 경로로 대상 파일을 직접 import해도 된다.
+- 잠금: `fsd/public-api` `fsd/slice-structure` `harness/no-relative-import` — 세그먼트 안 `index.ts`는 `fsd/slice-structure`가 막는다. 가져오는 쪽 위치를 보고 판정해, 같은 슬라이스 안의 별칭 경로는 허용한다.
 
 ## 세그먼트 — 목적으로 이름 짓는다
 
@@ -100,7 +100,9 @@ entities/user/
   - `ui` 화면 표시 · `model` 상태·비즈니스 로직·타입 · `api` 백엔드 통신 · `lib` 슬라이스 내부 보조 코드 · `config` 설정·상수
 - ❌ `components` / `hooks` / `types` / `utils` / `constants` / `services`를 **세그먼트 이름으로** 쓰지 않는다(종류 기준 이름).
   세그먼트 **안**의 하위 폴더는 자유다(`model/hooks/`, `ui/scene/` 등).
+- 컴포넌트는 `ui/`에만 두고, 파일 하나에 하나씩 파일 이름과 같은 이름으로 둔다(`ui/UserCard.tsx` → `UserCard`). 훅 파일에 Provider를 함께 선언하지 않는다.
 - 상태(store·atom)는 **쓰는 슬라이스의 `model`**에서 시작한다. 여러 곳에서 쓰게 되면 그때 entities로 내린다.
+- 잠금: `fsd/slice-structure` `fsd/component-file` `fsd/entity-state` — 마지막 규칙은 jotai를 쓰는 프로젝트에서만 켜진다(`fsd({ jotai: true })`).
 
 ## shared — 슬라이스 없이 세그먼트만
 
@@ -111,6 +113,7 @@ entities/user/
 - **정적 자산(이미지·폰트)도 쓰는 곳에 둔다.** 한 슬라이스만 쓰면 그 슬라이스의 `assets/`, 여러 슬라이스가 쓰면 `shared/assets/`.
   레이어 밖 `src/assets` 같은 공용 창고를 두지 않는다 — 어디서든 가져다 쓰게 되어 레이어 경계가 사라진다.
   전역 스타일은 app 레이어의 `styles/`(FSD 공식 App 레이어 세그먼트).
+- 잠금: `fsd/slice-structure` `fsd/public-api`
 
 ## Next.js(App Router)와 함께 쓸 때
 
@@ -119,6 +122,13 @@ entities/user/
   "rename both `app` and `pages` FSD layers to `_app` and `_pages`, regardless of which router you use").
   `views` 같은 다른 이름으로 바꾸지 않는다 — 한쪽만 공식을 따르면 레이어 이름 규칙이 둘이 된다.
 - 라우트 파일은 FSD page를 다시 내보내기만 한다: `export { ExamplePage as default, metadata } from '@/_pages/example'`.
+- 잠금: `fsd/routing-location` — Next 프로젝트에서만 켜진다(`fsd({ next: true })`).
+
+## 잠금이 도는 곳
+
+- 각 절 끝의 `잠금:` 줄은 그 절의 규칙 중 ESLint가 강제하는 것을 적는다. 적힌 규칙이 막는 항목만 기계가 지키고, 나머지 항목과 `잠금:` 줄이 없는 절(배치 결정, 안티패턴)은 판단이 필요한 권고다.
+- `fsd/*` 규칙은 프로젝트 `eslint.config`에 `my-fe-harness/eslint`의 `fsd()` 프리셋이 있을 때만 돈다. TypeScript 프로젝트는 `my-fe-harness init`(FSD 선택)이 넣어 주고(JS 프로젝트는 `quality()`만 깐다), Claude가 고친 파일마다 도는 lint 훅도 같은 설정을 읽는다.
+- `my-fe-harness check`는 이 규칙들의 결과를 프로젝트 전체에 대해 보여 준다.
 
 ## 안티패턴
 
