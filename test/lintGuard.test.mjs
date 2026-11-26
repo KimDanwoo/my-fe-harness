@@ -101,6 +101,47 @@ test('끝내기 전: 고친 파일을 고쳐 두었으면 통과하고, 다른 �
   assert.doesNotMatch(sub.stderr, /mine\.ts/)
 })
 
+function homeExcluding(roots) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-guard-home-'))
+  fs.mkdirSync(path.join(home, '.claude'))
+  fs.writeFileSync(path.join(home, '.claude', 'lint-guard-exclude.json'), JSON.stringify(roots))
+  return home
+}
+
+test('제외 목록(~/.claude/lint-guard-exclude.json)에 있는 폴더는 고칠 때 검사하지 않는다', () => {
+  const excluded = project()
+  const home = homeExcluding([excluded])
+  assert.equal(runGuard(edit(excluded, 'a.ts', 'BAD'), { HOME: home }).status, 0)
+  assert.equal(runGuard(edit(project(), 'b.ts', 'BAD'), { HOME: home }).status, 2)
+})
+
+test('고친 뒤에 제외 목록에 넣은 폴더는 끝낼 때 검사하지 않는다', () => {
+  const excluded = project()
+  const checked = project()
+  const session = `late${Date.now()}`
+  assert.equal(runGuard({ ...edit(excluded, 'a.ts', 'BAD'), session_id: session }).status, 2)
+  assert.equal(runGuard({ ...edit(checked, 'b.ts', 'BAD'), session_id: session }).status, 2)
+  const stop = runGuard({ hook_event_name: 'Stop', cwd: excluded, session_id: session }, { HOME: homeExcluding([excluded]) })
+  assert.equal(stop.status, 2)
+  assert.match(stop.stderr, /b\.ts/)
+  assert.doesNotMatch(stop.stderr, /a\.ts/)
+})
+
+test('제외 목록은 심볼릭 링크를 실제 경로로 풀어 비교한다', () => {
+  const excluded = project()
+  const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lint-guard-link-')), 'linked')
+  fs.symlinkSync(excluded, link)
+  assert.equal(runGuard(edit(excluded, 'a.ts', 'BAD'), { HOME: homeExcluding([link]) }).status, 0)
+})
+
+test('이름이 겹치는 옆 폴더와 상대경로 항목은 제외하지 않는다', () => {
+  const excluded = project()
+  const sibling = `${excluded}-sibling`
+  fs.cpSync(excluded, sibling, { recursive: true })
+  const home = homeExcluding([excluded, '.', ''])
+  assert.equal(runGuard(edit(sibling, 'a.ts', 'BAD'), { HOME: home }).status, 2)
+})
+
 test('고친 적이 없으면 끝낼 때 아무것도 하지 않는다', () => {
   assert.equal(runGuard({ hook_event_name: 'Stop', cwd: project(), session_id: `none${Date.now()}` }).status, 0)
 })
